@@ -37,12 +37,12 @@ text-align:center;line-height:1.6;font-size:13px;color:rgba(255,255,255,.85);poi
    설정값 (추후 튜닝 및 프로젝션 맵핑 이식을 위해 분리)
 --------------------------------------------------------------- */
 const CONFIG={
-  maxTips:18,
-  maxBranches:260,
-  maxNodes:520,
-  maxGroundSeeds:5,
+  maxTips:30,
+  maxBranches:420,
+  maxNodes:820,
+  maxGroundSeeds:7,
   branchPointsFlush:40,
-  ambientParticles:70
+  ambientParticles:150
 };
 
 const TONAL_MAP=[
@@ -271,13 +271,13 @@ function analyzeFace(){
 --------------------------------------------------------------- */
 function deriveComposite(){
   const expression=S.smile*.6+S.jaw*.35+S.brow*.35;
-  const rawEnergy=clamp01(S.motion*.4+S.volume*.35+expression*.15+Math.abs(S.pitch-.5)*.2);
-  C.energy=lerp(C.energy,rawEnergy,.05);
+  const rawEnergy=clamp01((S.motion*.55+S.volume*.5+expression*.22+Math.abs(S.pitch-.5)*.3)*1.15);
+  C.energy=lerp(C.energy,rawEnergy,.09);
 
   motionHist.push(S.motion); if(motionHist.length>30)motionHist.shift();
   pitchHist.push(S.pitch); if(pitchHist.length>30)pitchHist.shift();
-  const rawTension=clamp01(variance(motionHist)*10+variance(pitchHist)*6);
-  C.tension=lerp(C.tension,rawTension,.05);
+  const rawTension=clamp01(variance(motionHist)*14+variance(pitchHist)*9);
+  C.tension=lerp(C.tension,rawTension,.08);
 
   let posX=null,posY=null,active=false;
   if(faceModelReady&&S.face>.3){ posX=S.headX;posY=S.headY;active=true; }
@@ -324,9 +324,9 @@ function spawnBranch(parent){
 function spawnNode(tip){
   Garden.nodes.push({
     x:tip.x,y:tip.y,
-    size:2+S.volume*11,
+    size:3+S.volume*17,
     hue:tip.hue+S.pitch*40,
-    bloom:S.volume>.55,
+    bloom:S.volume>.46,
     born:performance.now()
   });
   if(Garden.nodes.length>CONFIG.maxNodes)Garden.nodes.shift();
@@ -357,7 +357,7 @@ function growGarden(dt,now){
     const target=lerpAngle(C.dirAngle,pitchBias,.5);
     tip.angle=lerpAngle(tip.angle,target,.08);
 
-    const growSpeed=3+C.energy*55+S.volume*35;
+    const growSpeed=8+C.energy*105+S.volume*70;
     const dist=growSpeed*dt;
     tip.x+=Math.cos(tip.angle)*dist;
     tip.y+=Math.sin(tip.angle)*dist;
@@ -367,12 +367,12 @@ function growGarden(dt,now){
     tip.length+=dist;
     tip.branchAccum+=dist;
 
-    const branchThreshold=150-S.volume*80;
+    const branchThreshold=Math.max(30,95-S.volume*75-C.energy*35);
     if(tip.branchAccum>branchThreshold){
       spawnBranch(tip);
       tip.branchAccum=0;
     }
-    if(S.volume>.5&&Math.random()<.015+C.energy*.05){
+    if(S.volume>.38&&Math.random()<.035+C.energy*.09){
       spawnNode(tip);
       AudioEngine.pluck();
       haptic();
@@ -417,38 +417,41 @@ function renderGarden(t){
   ctx.fillRect(0,0,W,H);
 
   for(const p of ambient){
-    const angle=p.phase+t/4000*p.speed;
-    const x=p.x*W+Math.cos(angle)*14;
-    const y=p.y*H+Math.sin(angle*1.3)*14;
-    const alpha=.04+p.z*.05+C.energy*.05;
+    const angle=p.phase+t/4000*p.speed*(1+C.energy*1.4);
+    const range=16+C.energy*34;
+    const x=p.x*W+Math.cos(angle)*range;
+    const y=p.y*H+Math.sin(angle*1.3)*range;
+    const alpha=.06+p.z*.09+C.energy*.16;
     ctx.beginPath();
-    ctx.arc(x,y,.6+p.z*1.4,0,Math.PI*2);
+    ctx.arc(x,y,.7+p.z*1.9+C.energy*1.2,0,Math.PI*2);
     ctx.fillStyle=`rgba(255,255,255,${alpha})`;
     ctx.fill();
   }
 
-  for(const b of Garden.branches)strokePath(b.points,b.width,b.hue,.5);
-  for(const tip of Garden.tips)strokePath(tip.points,tip.width,tip.hue,.72);
+  const widthBoost=1+C.energy*.75;
+  for(const b of Garden.branches)strokePath(b.points,b.width*widthBoost,b.hue,.62+C.energy*.18);
+  for(const tip of Garden.tips)strokePath(tip.points,tip.width*(widthBoost+.2),tip.hue,.82+C.energy*.14);
 
   const now=performance.now();
   for(const n of Garden.nodes){
     const age=(now-n.born)/1000;
-    const alpha=Math.min(.9,age*2)*(n.bloom?.85:.6);
-    const g=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,n.size*(n.bloom?3.2:1.8));
-    g.addColorStop(0,`hsla(${n.hue},90%,75%,${alpha})`);
-    g.addColorStop(1,`hsla(${n.hue},90%,50%,0)`);
+    const scaleUp=n.bloom?4.4:2.5;
+    const alpha=Math.min(1,age*2.4)*(n.bloom?.95:.7);
+    const g=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,n.size*scaleUp);
+    g.addColorStop(0,`hsla(${n.hue},95%,78%,${alpha})`);
+    g.addColorStop(1,`hsla(${n.hue},95%,50%,0)`);
     ctx.fillStyle=g;
     ctx.beginPath();
-    ctx.arc(n.x,n.y,n.size*(n.bloom?3.2:1.8),0,Math.PI*2);
+    ctx.arc(n.x,n.y,n.size*scaleUp,0,Math.PI*2);
     ctx.fill();
     if(n.bloom){
-      for(let k=0;k<5;k++){
-        const a=k/5*Math.PI*2;
-        const px=n.x+Math.cos(a)*n.size*1.6;
-        const py=n.y+Math.sin(a)*n.size*1.6;
+      for(let k=0;k<7;k++){
+        const a=k/7*Math.PI*2;
+        const px=n.x+Math.cos(a)*n.size*1.8;
+        const py=n.y+Math.sin(a)*n.size*1.8;
         ctx.beginPath();
-        ctx.arc(px,py,n.size*.55,0,Math.PI*2);
-        ctx.fillStyle=`hsla(${n.hue+k*8},85%,72%,${alpha*.7})`;
+        ctx.arc(px,py,n.size*.65,0,Math.PI*2);
+        ctx.fillStyle=`hsla(${n.hue+k*8},90%,74%,${alpha*.75})`;
         ctx.fill();
       }
     }
@@ -456,11 +459,11 @@ function renderGarden(t){
 
   const px=faceModelReady&&S.face>.3?S.headX*W:motionCentroid.x*W;
   const py=faceModelReady&&S.face>.3?S.headY*H:motionCentroid.y*H;
-  const glowR=40+C.energy*90;
+  const glowR=55+C.energy*185;
   const scale=pickScale(C.energy,C.tension);
   const g2=ctx.createRadialGradient(px,py,0,px,py,glowR);
-  g2.addColorStop(0,`hsla(${scale.hue},85%,75%,${.10+C.energy*.12})`);
-  g2.addColorStop(1,`hsla(${scale.hue},85%,50%,0)`);
+  g2.addColorStop(0,`hsla(${scale.hue},90%,78%,${.16+C.energy*.26})`);
+  g2.addColorStop(1,`hsla(${scale.hue},90%,50%,0)`);
   ctx.fillStyle=g2;
   ctx.beginPath();ctx.arc(px,py,glowR,0,Math.PI*2);ctx.fill();
 }
@@ -475,7 +478,7 @@ function render(t){
    화성/음계 매핑은 TONAL_MAP 하나로 분리되어 있어 자유롭게 교체 가능
 --------------------------------------------------------------- */
 const AudioEngine={
-  ctx:null,padGain:null,padFilter:null,osc1:null,osc2:null,lastPluck:0,
+  ctx:null,padGain:null,padFilter:null,osc1:null,osc2:null,osc3:null,lfo:null,lfoGain:null,lastPluck:0,
   init(ac){
     this.ctx=ac;
     this.padFilter=ac.createBiquadFilter();
@@ -487,37 +490,54 @@ const AudioEngine={
 
     this.osc1=ac.createOscillator();
     this.osc2=ac.createOscillator();
+    this.osc3=ac.createOscillator();
     this.osc1.type="sine";
     this.osc2.type="sine";
+    this.osc3.type="sine";
     this.osc1.frequency.value=196;
     this.osc2.frequency.value=196*1.5;
+    this.osc3.frequency.value=196*2;
+    this.osc2.detune.value=6;
+    this.osc3.detune.value=-6;
     this.osc1.connect(this.padFilter);
     this.osc2.connect(this.padFilter);
+    this.osc3.connect(this.padFilter);
     this.padFilter.connect(this.padGain);
     this.padGain.connect(ac.destination);
-    this.osc1.start();this.osc2.start();
+
+    this.lfo=ac.createOscillator();
+    this.lfo.frequency.value=.15;
+    this.lfoGain=ac.createGain();
+    this.lfoGain.gain.value=4;
+    this.lfo.connect(this.lfoGain);
+    this.lfoGain.connect(this.osc2.detune);
+
+    this.osc1.start();this.osc2.start();this.osc3.start();this.lfo.start();
   },
   update(){
     if(!this.ctx||this.ctx.state!=="running")return;
     const scale=pickScale(C.energy,C.tension);
     const t=this.ctx.currentTime;
-    const targetGain=.015+C.energy*.045;
-    this.padGain.gain.setTargetAtTime(targetGain,t,.4);
-    this.padFilter.frequency.setTargetAtTime(scale.filter*.4+S.pitch*700,t,.5);
-    this.osc1.frequency.setTargetAtTime(scale.baseFreq,t,.6);
-    this.osc2.frequency.setTargetAtTime(scale.baseFreq*scale.ratios[2]+C.tension*6,t,.6);
+    const targetGain=.02+C.energy*.09;
+    this.padGain.gain.setTargetAtTime(targetGain,t,.35);
+    this.padFilter.frequency.setTargetAtTime(scale.filter*.55+S.pitch*1200,t,.4);
+    this.osc1.frequency.setTargetAtTime(scale.baseFreq,t,.5);
+    this.osc2.frequency.setTargetAtTime(scale.baseFreq*scale.ratios[2]+C.tension*8,t,.5);
+    this.osc3.frequency.setTargetAtTime(scale.baseFreq*scale.ratios[4],t,.5);
+    this.lfoGain.gain.setTargetAtTime(3+C.tension*18+C.energy*6,t,.5);
     this.osc1.type=scale.wave==="sawtooth"?"triangle":scale.wave;
   },
   pluck(){
     if(!this.ctx||this.ctx.state!=="running")return;
     const now=performance.now();
-    const minGap=180-Math.min(100,S.motion*80);
+    const minGap=130-Math.min(95,S.motion*95);
     if(now-this.lastPluck<minGap)return;
     this.lastPluck=now;
 
     const scale=pickScale(C.energy,C.tension);
     const idx=Math.min(scale.ratios.length-1,Math.floor(S.pitch*scale.ratios.length));
     const freq=scale.baseFreq*2*scale.ratios[idx];
+    const peak=.018+S.volume*.09;
 
     const t=this.ctx.currentTime;
     const osc=this.ctx.createOscillator();
@@ -525,11 +545,22 @@ const AudioEngine={
     osc.type=scale.wave;
     osc.frequency.value=freq;
     gain.gain.setValueAtTime(.0001,t);
-    gain.gain.exponentialRampToValueAtTime(.01+S.volume*.05,t+.02);
-    gain.gain.exponentialRampToValueAtTime(.0001,t+.5);
+    gain.gain.exponentialRampToValueAtTime(peak,t+.02);
+    gain.gain.exponentialRampToValueAtTime(.0001,t+.55);
     osc.connect(gain);
     gain.connect(this.ctx.destination);
-    osc.start(t);osc.stop(t+.52);
+    osc.start(t);osc.stop(t+.57);
+
+    const osc2=this.ctx.createOscillator();
+    const gain2=this.ctx.createGain();
+    osc2.type="sine";
+    osc2.frequency.value=freq*2;
+    gain2.gain.setValueAtTime(.0001,t);
+    gain2.gain.exponentialRampToValueAtTime(peak*.45,t+.03);
+    gain2.gain.exponentialRampToValueAtTime(.0001,t+.4);
+    osc2.connect(gain2);
+    gain2.connect(this.ctx.destination);
+    osc2.start(t);osc2.stop(t+.42);
   }
 };
 
