@@ -475,36 +475,71 @@ function haptic(){
 
 /* ---------------------------------------------------------------
    시각장애 사용자를 위한 음성 리딩용 텍스트 출력
-   화면 하단에 작고 낮은 opacity로도 표시하되, aria-live로 스크린리더에도 동일하게 낭독됨
-   현재 상태의 스냅샷이 아니라 "감정(에너지/텐션)이 어떻게 변화하고 있는지" 추세를 문장으로 옮긴다
+   화면 하단에 작고 낮은 opacity로도 표시하고, aria-live + SpeechSynthesis로 직접 소리내어 읽는다
+   매번 같은 문장을 반복하지 않도록 트렌드/방향/색/성장 중 서로 다른 측면을 번갈아 언급해
+   화면이 바뀌는 대로 계속 다른 이야기를 들려주는 내레이션에 가깝게 구성한다
 --------------------------------------------------------------- */
 const energyTrend=[];
+const MOOD_TEXT={calm:"초록빛 고요함",mid:"따뜻한 노을빛",bright:"밝은 주황빛 생동감",tense:"진한 자줏빛 긴장감"};
+
+function angleWord(a){
+  const deg=((a*180/Math.PI)+360)%360;
+  const dirs=["오른쪽","오른쪽 아래","아래","왼쪽 아래","왼쪽","왼쪽 위","위","오른쪽 위"];
+  return dirs[Math.round(deg/45)%8];
+}
 
 function describeGarden(now){
+  const scale=pickScale(C.energy,C.tension);
   const past=energyTrend[0];
   const dEnergy=past?C.energy-past.energy:0;
   const dTension=past?C.tension-past.tension:0;
 
-  let trendWord;
-  if(!past||(Math.abs(dEnergy)<.06&&Math.abs(dTension)<.08)) trendWord="비슷한 흐름을 유지하고 있는";
-  else if(dEnergy>.06&&dTension>.08) trendWord="점점 강렬하고 불안정해지는";
-  else if(dEnergy>.06) trendWord="점점 활발해지는";
-  else if(dEnergy<-.06&&dTension<-.05) trendWord="점점 차분하고 안정되어가는";
-  else if(dEnergy<-.06) trendWord="점점 잔잔해지는";
-  else if(dTension>.08) trendWord="점점 불규칙해지는";
-  else trendWord="조금씩 변화하는";
+  let trend;
+  if(!past||(Math.abs(dEnergy)<.06&&Math.abs(dTension)<.08)) trend="비슷한 흐름을 유지하고 있어요";
+  else if(dEnergy>.06&&dTension>.08) trend="점점 강렬하고 불안정해지고 있어요";
+  else if(dEnergy>.06) trend="점점 활발해지고 있어요";
+  else if(dEnergy<-.06&&dTension<-.05) trend="점점 차분하고 안정되어가고 있어요";
+  else if(dEnergy<-.06) trend="점점 잔잔해지고 있어요";
+  else if(dTension>.08) trend="점점 불규칙해지고 있어요";
+  else trend="조금씩 변화하고 있어요";
 
   const total=Garden.branches.length+Garden.tips.length;
-  const growthWord=total>60?"무성하게 뻗어나간":total>20?"가지를 뻗어가는":"막 싹을 틔운";
+  const growth=total>60?"정원이 무성하게 뻗어나갔어요":total>20?"정원이 가지를 뻗어가고 있어요":"정원이 막 싹을 틔웠어요";
+  const direction=`지금은 ${angleWord(C.dirAngle)} 방향으로 자라고 있어요`;
+  const color=`${MOOD_TEXT[scale.name]}이 화면을 감싸고 있어요`;
   const justBloomed=Garden.nodes.some(n=>n.bloom&&now-n.born<2600);
-  return `${trendWord} 정원이 ${growthWord} 모습입니다.${justBloomed?" 방금 하나의 꽃이 피었습니다.":""}`;
+
+  const extras=[direction,color,growth];
+  const pick=extras[Math.floor(Math.random()*extras.length)];
+  let sentence=`${trend}. ${pick}.`;
+  if(justBloomed)sentence+=" 방금 하나의 꽃이 피었어요.";
+  return sentence;
+}
+
+let lastSpokenText="",lastSpeakTime=0;
+function speakDescription(text){
+  if(!("speechSynthesis" in window))return;
+  const now=performance.now();
+  if(text===lastSpokenText||now-lastSpeakTime<9000)return;
+  lastSpokenText=text;
+  lastSpeakTime=now;
+  try{
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang="ko-KR";
+    u.rate=.95;
+    u.volume=.85;
+    speechSynthesis.speak(u);
+  }catch(_){}
 }
 
 function updateAccessibilityText(now){
   if(now-lastSrUpdate<CONFIG.srUpdateInterval)return;
   lastSrUpdate=now;
+  const text=describeGarden(now);
   const el=$("srDesc");
-  if(el)el.textContent=describeGarden(now);
+  if(el)el.textContent=text;
+  speakDescription(text);
   energyTrend.push({t:now,energy:C.energy,tension:C.tension});
   while(energyTrend.length>1&&now-energyTrend[0].t>20000)energyTrend.shift();
 }
