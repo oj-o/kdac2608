@@ -516,6 +516,24 @@ function describeGarden(now){
   return sentence;
 }
 
+/* 도슨트처럼 차분하고 다정한 한국어 여성 음성을 우선 선택 */
+let docentVoice=null;
+function pickDocentVoice(){
+  if(!("speechSynthesis" in window))return null;
+  const voices=speechSynthesis.getVoices();
+  const ko=voices.filter(v=>v.lang&&v.lang.toLowerCase().startsWith("ko"));
+  if(!ko.length)return null;
+  const maleHint=/male|남성|injoon|minsu|남자/i;
+  const femaleHint=/female|여성|여자|yuna|sunhi|heami|나리|아름|지연/i;
+  return ko.find(v=>femaleHint.test(v.name))
+    || ko.find(v=>!maleHint.test(v.name))
+    || ko[0];
+}
+if("speechSynthesis" in window){
+  docentVoice=pickDocentVoice();
+  speechSynthesis.onvoiceschanged=()=>{ docentVoice=pickDocentVoice(); };
+}
+
 let lastSpokenText="",lastSpeakTime=0;
 function speakDescription(text){
   if(!("speechSynthesis" in window))return;
@@ -527,7 +545,9 @@ function speakDescription(text){
     speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(text);
     u.lang="ko-KR";
-    u.rate=.95;
+    if(docentVoice)u.voice=docentVoice;
+    u.rate=.92;
+    u.pitch=1.08;
     u.volume=.85;
     speechSynthesis.speak(u);
   }catch(_){}
