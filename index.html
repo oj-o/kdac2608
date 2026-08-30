@@ -22,6 +22,8 @@ color:rgba(255,255,255,.55);opacity:1;transition:opacity 3.5s ease;pointer-event
 #error{display:none;position:absolute;z-index:10;left:16px;right:16px;top:50%;transform:translateY(-50%);
 padding:16px;border-radius:16px;background:rgba(0,0,0,.82);border:1px solid rgba(255,255,255,.1);
 text-align:center;line-height:1.6;font-size:13px;color:rgba(255,255,255,.85);pointer-events:none}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+clip:rect(0,0,0,0);white-space:nowrap;border:0}
 </style>
 </head>
 <body>
@@ -30,6 +32,7 @@ text-align:center;line-height:1.6;font-size:13px;color:rgba(255,255,255,.85);poi
   <video id="camera" autoplay muted playsinline></video>
   <div class="title" id="title">me, myself</div>
   <div id="error"></div>
+  <div id="srDesc" class="sr-only" role="status" aria-live="polite"></div>
 </div>
 
 <script type="module">
@@ -42,7 +45,11 @@ const CONFIG={
   maxNodes:820,
   maxGroundSeeds:7,
   branchPointsFlush:40,
-  ambientParticles:150
+  ambientParticles:150,
+  sensitivityCurve:.42,
+  impulseDecay:.88,
+  impulseBranchCooldown:900,
+  srUpdateInterval:6000
 };
 
 const TONAL_MAP=[
@@ -58,6 +65,7 @@ const TONAL_MAP=[
 const $=(id)=>document.getElementById(id);
 const clamp01=(v)=>v<0?0:v>1?1:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
+function boost(x){ return Math.pow(clamp01(x),CONFIG.sensitivityCurve); }
 function lerpAngle(a,b,t){
   let d=((b-a+Math.PI*3)%(Math.PI*2))-Math.PI;
   return a+d*t;
@@ -98,14 +106,17 @@ addEventListener("resize",resize);resize();
 --------------------------------------------------------------- */
 const S={
   motion:.02, volume:.02, pitch:.35,
-  face:0, smile:0, jaw:0, brow:0,
-  headX:.5, headY:.5
+  face:0, smile:0, jaw:0, brow:0, eyeWide:0, blink:0,
+  gazeX:0, gazeY:0,
+  headX:.5, headY:.5,
+  touch:0, touchMove:0, touchPressure:0
 };
 const motionCentroid={x:.5,y:.5,mag:0};
 
 /* 복합 상태: 그래픽/사운드가 공유하는 단일 작품 언어 */
-const C={energy:.05,tension:0,dirAngle:-Math.PI/2};
-const motionHist=[],pitchHist=[];
+const C={energy:.05,tension:0,dirAngle:-Math.PI/2,impulse:0};
+const motionHist=[],pitchHist=[],gazeHist=[];
+let prevRaw={motion:0,volume:0,pitch:.35,expr:0,gaze:0,touch:0};
 
 let camOK=false,micOK=false,faceModelReady=false;
 let cameraStream=null,micStream=null;
@@ -114,6 +125,8 @@ let prevPixels=null,sampleCanvas=null,sampleCtx=null;
 let faceLandmarker=null,lastVideoTime=-1;
 let prevPosX=null,prevPosY=null;
 let lastVibrate=0;
+let pointerDownAt=null,touchLast=null;
+let lastSrUpdate=0;
 
 /* ---------------------------------------------------------------
    실제 카메라 / 마이크
@@ -156,6 +169,34 @@ async function startMicrophone(){
   },{passive:true});
 });
 document.addEventListener("touchmove",(e)=>e.preventDefault(),{passive:false});
+
+/* 터치는 필수 조작이 아닌 보조 입력 채널 - 압력/이동량/유지시간의 "정도"로 반응 */
+document.addEventListener("pointerdown",(e)=>{
+  pointerDownAt=performance.now();
+  touchLast={x:e.clientX,y:e.clientY};
+  S.touchPressure=e.pressure||.55;
+},{passive:true});
+document.addEventListener("pointermove",(e)=>{
+  if(!touchLast)return;
+  const dx=e.clientX-touchLast.x, dy=e.clientY-touchLast.y;
+  const mag=Math.hypot(dx,dy);
+  if(mag>1.5){
+    C.dirAngle=lerpAngle(C.dirAngle,Math.atan2(dy,dx),.2);
+    S.touchMove=Math.min(1,mag/36);
+  }
+  touchLast={x:e.clientX,y:e.clientY};
+  S.touchPressure=e.pressure||S.touchPressure;
+},{passive:true});
+document.addEventListener("pointerup",()=>{pointerDownAt=null;touchLast=null},{passive:true});
+document.addEventListener("pointercancel",()=>{pointerDownAt=null;touchLast=null},{passive:true});
+
+function analyzeTouch(){
+  const held=pointerDownAt!=null;
+  const holdFactor=held?Math.min(1,(performance.now()-pointerDownAt)/1400):0;
+  const target=held?clamp01(.3+holdFactor*.4+S.touchMove*.8+S.touchPressure*.3):0;
+  S.touch=lerp(S.touch,target,target>S.touch?.22:.1);
+  S.touchMove=lerp(S.touchMove,0,.2);
+}
 
 /* ---------------------------------------------------------------
    음량 + 피치 분석
@@ -252,6 +293,8 @@ function analyzeFace(){
 
   if(!result.faceLandmarks?.length){
     S.face=lerp(S.face,0,.14);
+    S.gazeX=lerp(S.gazeX,0,.1);
+    S.gazeY=lerp(S.gazeY,0,.1);
     return;
   }
   S.face=lerp(S.face,1,.18);
@@ -264,35 +307,61 @@ function analyzeFace(){
   S.smile=lerp(S.smile,(blend(result,"mouthSmileLeft")+blend(result,"mouthSmileRight"))/2,.18);
   S.jaw=lerp(S.jaw,blend(result,"jawOpen"),.18);
   S.brow=lerp(S.brow,blend(result,"browInnerUp"),.18);
+
+  /* 눈빛(시선)·눈뜸·깜빡임 - 머리를 움직이기 어려운 사용자도 시선만으로 방향을 만들 수 있게 */
+  S.eyeWide=lerp(S.eyeWide,(blend(result,"eyeWideLeft")+blend(result,"eyeWideRight"))/2,.16);
+  S.blink=lerp(S.blink,(blend(result,"eyeBlinkLeft")+blend(result,"eyeBlinkRight"))/2,.3);
+  const gx=(blend(result,"eyeLookOutRight")+blend(result,"eyeLookInLeft"))-(blend(result,"eyeLookOutLeft")+blend(result,"eyeLookInRight"));
+  const gy=(blend(result,"eyeLookDownLeft")+blend(result,"eyeLookDownRight"))-(blend(result,"eyeLookUpLeft")+blend(result,"eyeLookUpRight"));
+  S.gazeX=lerp(S.gazeX,gx,.2);
+  S.gazeY=lerp(S.gazeY,gy,.2);
 }
 
 /* ---------------------------------------------------------------
    복합 상태 도출: motion+volume+pitch+face -> energy / tension / 방향
 --------------------------------------------------------------- */
-function deriveComposite(){
-  const expression=S.smile*.6+S.jaw*.35+S.brow*.35;
-  const rawEnergy=clamp01((S.motion*.55+S.volume*.5+expression*.22+Math.abs(S.pitch-.5)*.3)*1.15);
-  C.energy=lerp(C.energy,rawEnergy,.09);
+function deriveComposite(now){
+  const bm=boost(S.motion), bv=boost(S.volume), bt=boost(S.touch);
+  const gazeMag=Math.hypot(S.gazeX,S.gazeY);
+  const expression=clamp01(S.smile*.45+S.jaw*.22+S.brow*.18+S.eyeWide*.25+S.blink*.08);
+
+  /* 작은 입력도 뚜렷하게: 저입력 구간을 크게 증폭하는 곡선을 통과시킨 뒤 합산 */
+  const rawEnergy=clamp01((bm*.38+bv*.36+bt*.28+expression*.22+gazeMag*.14+Math.abs(S.pitch-.5)*.22)*1.1);
+  C.energy=lerp(C.energy,rawEnergy,.1);
 
   motionHist.push(S.motion); if(motionHist.length>30)motionHist.shift();
   pitchHist.push(S.pitch); if(pitchHist.length>30)pitchHist.shift();
-  const rawTension=clamp01(variance(motionHist)*14+variance(pitchHist)*9);
+  gazeHist.push(gazeMag); if(gazeHist.length>30)gazeHist.shift();
+  const rawTension=clamp01(variance(motionHist)*14+variance(pitchHist)*9+variance(gazeHist)*10);
   C.tension=lerp(C.tension,rawTension,.08);
 
-  let posX=null,posY=null,active=false;
-  if(faceModelReady&&S.face>.3){ posX=S.headX;posY=S.headY;active=true; }
+  /* 절대 수준이 아닌 "순간 변화량" 자체를 감지해 즉각적인 반응을 만든다 */
+  const dChange=Math.abs(S.motion-prevRaw.motion)*2.2
+    +Math.abs(S.volume-prevRaw.volume)*2.0
+    +Math.abs(S.pitch-prevRaw.pitch)*1.6
+    +Math.abs(expression-prevRaw.expr)*2.6
+    +Math.abs(gazeMag-prevRaw.gaze)*1.8
+    +Math.abs(S.touch-prevRaw.touch)*1.8;
+  const rawImpulse=clamp01(dChange*3.4);
+  C.impulse=Math.max(C.impulse*CONFIG.impulseDecay,rawImpulse);
+  prevRaw={motion:S.motion,volume:S.volume,pitch:S.pitch,expr:expression,gaze:gazeMag,touch:S.touch};
+
+  /* 방향 우선순위: 시선(가장 적은 움직임으로 가능) > 머리 위치 > 프레임 움직임 중심 */
+  let posX=null,posY=null,active=false,fromGaze=false;
+  if(faceModelReady&&gazeMag>.1){ posX=.5+S.gazeX*.6;posY=.5+S.gazeY*.6;active=true;fromGaze=true; }
+  else if(faceModelReady&&S.face>.3){ posX=S.headX;posY=S.headY;active=true; }
   else if(motionCentroid.mag>.02){ posX=motionCentroid.x;posY=motionCentroid.y;active=true; }
 
   if(active&&prevPosX!=null){
     const dx=posX-prevPosX, dy=posY-prevPosY;
-    if(Math.hypot(dx,dy)>.002){
-      C.dirAngle=lerpAngle(C.dirAngle,Math.atan2(dy,dx),.15);
+    if(Math.hypot(dx,dy)>(fromGaze?.006:.002)){
+      C.dirAngle=lerpAngle(C.dirAngle,Math.atan2(dy,dx),fromGaze?.2:.15);
     }
   }
   if(posX!=null){prevPosX=posX;prevPosY=posY}
 
   if(!camOK){
-    const target=-Math.PI/2+(S.pitch-.5)*1.4+Math.sin(performance.now()*.00015)*.3;
+    const target=-Math.PI/2+(S.pitch-.5)*1.4+Math.sin(now*.00015)*.3;
     C.dirAngle=lerpAngle(C.dirAngle,target,.03);
   }
 }
@@ -301,7 +370,7 @@ function deriveComposite(){
    Digital Garden 엔진
    입력(S,C)만 소비하는 순수 상태로 분리 -> 프로젝션 맵핑 캔버스에서도 재사용 가능
 --------------------------------------------------------------- */
-const Garden={tips:[],branches:[],nodes:[],groundSeeds:0,lastSeedTime:0};
+const Garden={tips:[],branches:[],nodes:[],groundSeeds:0,lastSeedTime:0,lastImpulseBranch:0};
 
 function newTip(x,y,angle,hue,width){
   return {x,y,angle,hue,width,points:[{x,y}],length:0,branchAccum:0,born:performance.now()};
@@ -352,12 +421,25 @@ function growGarden(dt,now){
     Garden.lastSeedTime=now;
   }
 
+  const bv=boost(S.volume), bm=boost(S.motion);
+
+  /* 순간적인 변화(변화량)는 축적을 기다리지 않고 즉시 하나의 사건으로 나타난다 */
+  if(C.impulse>.55 && now-Garden.lastImpulseBranch>CONFIG.impulseBranchCooldown && Garden.tips.length){
+    const t=Garden.tips[Math.floor(Math.random()*Garden.tips.length)];
+    spawnBranch(t);
+    spawnNode(t);
+    AudioEngine.sparkle();
+    haptic();
+    Garden.lastImpulseBranch=now;
+  }
+
   for(const tip of Garden.tips){
     const pitchBias=-Math.PI/2+(S.pitch-.5)*1.1;
     const target=lerpAngle(C.dirAngle,pitchBias,.5);
     tip.angle=lerpAngle(tip.angle,target,.08);
+    tip.hue=lerp(tip.hue,pickScale(C.energy,C.tension).hue,.02+C.impulse*.12);
 
-    const growSpeed=8+C.energy*105+S.volume*70;
+    const growSpeed=10+C.energy*115+bv*90+bm*40;
     const dist=growSpeed*dt;
     tip.x+=Math.cos(tip.angle)*dist;
     tip.y+=Math.sin(tip.angle)*dist;
@@ -367,12 +449,12 @@ function growGarden(dt,now){
     tip.length+=dist;
     tip.branchAccum+=dist;
 
-    const branchThreshold=Math.max(30,95-S.volume*75-C.energy*35);
+    const branchThreshold=Math.max(22,85-bv*75-C.energy*40);
     if(tip.branchAccum>branchThreshold){
       spawnBranch(tip);
       tip.branchAccum=0;
     }
-    if(S.volume>.38&&Math.random()<.035+C.energy*.09){
+    if((bv>.22||C.impulse>.4)&&Math.random()<.04+C.energy*.1+C.impulse*.2){
       spawnNode(tip);
       AudioEngine.pluck();
       haptic();
@@ -387,6 +469,27 @@ function haptic(){
   if(now-lastVibrate<1400)return;
   lastVibrate=now;
   try{navigator.vibrate(16)}catch(_){}
+}
+
+/* ---------------------------------------------------------------
+   시각장애 사용자를 위한 음성 리딩용 텍스트 출력
+   화면에는 보이지 않고(aria-live) 스크린리더로만 낭독됨 - 같은 상태값을 언어로 번역
+--------------------------------------------------------------- */
+function describeGarden(now){
+  const scale=pickScale(C.energy,C.tension);
+  const energyWord=C.energy<.22?"고요하게 멈춰있는":C.energy<.5?"잔잔하게 흔들리는":C.energy<.78?"활발하게 움직이는":"강렬하게 요동치는";
+  const tensionWord=C.tension>.6?" 불규칙한 리듬으로":C.tension>.3?" 조금씩 흔들리며":"";
+  const total=Garden.branches.length+Garden.tips.length;
+  const growthWord=total>60?"무성하게 뻗어나간":total>20?"가지를 뻗어가는":"막 싹을 틔운";
+  const justBloomed=Garden.nodes.some(n=>n.bloom&&now-n.born<2600);
+  return `${energyWord}${tensionWord} 정원이 ${growthWord} 모습입니다.${justBloomed?" 방금 하나의 꽃이 피었습니다.":""}`;
+}
+
+function updateAccessibilityText(now){
+  if(now-lastSrUpdate<CONFIG.srUpdateInterval)return;
+  lastSrUpdate=now;
+  const el=$("srDesc");
+  if(el)el.textContent=describeGarden(now);
 }
 
 /* ---------------------------------------------------------------
@@ -413,30 +516,38 @@ function strokePath(points,width,hue,alpha){
 }
 
 function renderGarden(t){
+  const scale=pickScale(C.energy,C.tension);
+  /* 생동감: 현재 에너지(증폭)+순간 변화량이 합쳐져 화면 전체가 늘고 줄고 밝아지고 어두워진다 */
+  const vitality=.4+boost(C.energy)*.95+C.impulse*.55;
+
   ctx.fillStyle="#050505";
   ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=`hsla(${scale.hue},55%,8%,${.05+C.impulse*.07})`;
+  ctx.fillRect(0,0,W,H);
 
-  for(const p of ambient){
+  const visibleAmbient=Math.min(ambient.length,Math.floor(14+vitality*125));
+  for(let i=0;i<visibleAmbient;i++){
+    const p=ambient[i];
     const angle=p.phase+t/4000*p.speed*(1+C.energy*1.4);
-    const range=16+C.energy*34;
+    const range=16+C.energy*34+C.impulse*22;
     const x=p.x*W+Math.cos(angle)*range;
     const y=p.y*H+Math.sin(angle*1.3)*range;
-    const alpha=.06+p.z*.09+C.energy*.16;
+    const alpha=Math.min(1,(.05+p.z*.08+C.energy*.14)*vitality);
     ctx.beginPath();
     ctx.arc(x,y,.7+p.z*1.9+C.energy*1.2,0,Math.PI*2);
-    ctx.fillStyle=`rgba(255,255,255,${alpha})`;
+    ctx.fillStyle=`hsla(${scale.hue+p.z*30},72%,80%,${alpha})`;
     ctx.fill();
   }
 
-  const widthBoost=1+C.energy*.75;
-  for(const b of Garden.branches)strokePath(b.points,b.width*widthBoost,b.hue,.62+C.energy*.18);
-  for(const tip of Garden.tips)strokePath(tip.points,tip.width*(widthBoost+.2),tip.hue,.82+C.energy*.14);
+  const widthBoost=.55+vitality*.85;
+  for(const b of Garden.branches)strokePath(b.points,b.width*widthBoost,b.hue,Math.min(1,.4+vitality*.42));
+  for(const tip of Garden.tips)strokePath(tip.points,tip.width*(widthBoost+.25),tip.hue,Math.min(1,.58+vitality*.38));
 
   const now=performance.now();
   for(const n of Garden.nodes){
     const age=(now-n.born)/1000;
-    const scaleUp=n.bloom?4.4:2.5;
-    const alpha=Math.min(1,age*2.4)*(n.bloom?.95:.7);
+    const scaleUp=(n.bloom?4.4:2.5)*(.8+vitality*.35);
+    const alpha=Math.min(1,age*2.4)*(n.bloom?.95:.7)*Math.min(1,.55+vitality*.55);
     const g=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,n.size*scaleUp);
     g.addColorStop(0,`hsla(${n.hue},95%,78%,${alpha})`);
     g.addColorStop(1,`hsla(${n.hue},95%,50%,0)`);
@@ -459,10 +570,9 @@ function renderGarden(t){
 
   const px=faceModelReady&&S.face>.3?S.headX*W:motionCentroid.x*W;
   const py=faceModelReady&&S.face>.3?S.headY*H:motionCentroid.y*H;
-  const glowR=55+C.energy*185;
-  const scale=pickScale(C.energy,C.tension);
+  const glowR=55+C.energy*185+C.impulse*75;
   const g2=ctx.createRadialGradient(px,py,0,px,py,glowR);
-  g2.addColorStop(0,`hsla(${scale.hue},90%,78%,${.16+C.energy*.26})`);
+  g2.addColorStop(0,`hsla(${scale.hue},90%,78%,${Math.min(1,.16+C.energy*.26+C.impulse*.22)})`);
   g2.addColorStop(1,`hsla(${scale.hue},90%,50%,0)`);
   ctx.fillStyle=g2;
   ctx.beginPath();ctx.arc(px,py,glowR,0,Math.PI*2);ctx.fill();
@@ -561,6 +671,21 @@ const AudioEngine={
     osc2.connect(gain2);
     gain2.connect(this.ctx.destination);
     osc2.start(t);osc2.stop(t+.42);
+  },
+  sparkle(){
+    if(!this.ctx||this.ctx.state!=="running")return;
+    const scale=pickScale(C.energy,C.tension);
+    const t=this.ctx.currentTime;
+    const osc=this.ctx.createOscillator();
+    const gain=this.ctx.createGain();
+    osc.type="sine";
+    osc.frequency.value=scale.baseFreq*4*scale.ratios[scale.ratios.length-1];
+    gain.gain.setValueAtTime(.0001,t);
+    gain.gain.exponentialRampToValueAtTime(.055,t+.008);
+    gain.gain.exponentialRampToValueAtTime(.0001,t+.28);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(t);osc.stop(t+.3);
   }
 };
 
@@ -587,10 +712,12 @@ async function init(){
   if(camOK)loadFaceModel();
 
   setInterval(()=>{
+    const now=performance.now();
     analyzeMotion();
     analyzeAudio();
     analyzeFace();
-    deriveComposite();
+    analyzeTouch();
+    deriveComposite(now);
     AudioEngine.update();
   },80);
 
@@ -600,6 +727,7 @@ async function init(){
     const dt=Math.min(.25,(now-lastTick)/1000);
     lastTick=now;
     growGarden(dt,now);
+    updateAccessibilityText(now);
   },80);
 }
 
