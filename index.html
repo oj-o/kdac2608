@@ -506,12 +506,13 @@ function describeGarden(now){
   const total=Garden.branches.length+Garden.tips.length;
   const growth=total>60?"정원이 무성하게 뻗어나갔어요":total>20?"정원이 가지를 뻗어가고 있어요":"정원이 막 싹을 틔웠어요";
   const direction=`지금은 ${angleWord(C.dirAngle)} 방향으로 자라고 있어요`;
-  const color=`${MOOD_TEXT[scale.name]}이 화면을 감싸고 있어요`;
+  const mood=`${MOOD_TEXT[scale.name]}이 느껴지는 정원이에요`;
   const justBloomed=Garden.nodes.some(n=>n.bloom&&now-n.born<2600);
 
-  const extras=[direction,color,growth];
+  /* 감정(에너지/화성)은 매번 반드시 언급하고, 방향/성장 중 하나만 번갈아 곁들인다 */
+  const extras=[direction,growth];
   const pick=extras[Math.floor(Math.random()*extras.length)];
-  let sentence=`${trend}. ${pick}.`;
+  let sentence=`${trend}. ${mood}. ${pick}.`;
   if(justBloomed)sentence+=" 방금 하나의 꽃이 피었어요.";
   return sentence;
 }
@@ -536,7 +537,9 @@ if("speechSynthesis" in window){
 
 let lastSpokenText="",lastSpeakTime=0;
 function speakDescription(text){
-  if(!("speechSynthesis" in window))return;
+  /* 실제 한국어 음성을 찾지 못하면 기기가 엉뚱한 언어/성별 기본 음성으로 대신 읽어버리므로,
+     그 경우엔 화면 텍스트만 남기고 음성은 아예 재생하지 않는다 */
+  if(!("speechSynthesis" in window)||!docentVoice)return;
   const now=performance.now();
   if(text===lastSpokenText||now-lastSpeakTime<9000)return;
   lastSpokenText=text;
@@ -545,7 +548,7 @@ function speakDescription(text){
     speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(text);
     u.lang="ko-KR";
-    if(docentVoice)u.voice=docentVoice;
+    u.voice=docentVoice;
     u.rate=.92;
     u.pitch=1.08;
     u.volume=.85;
