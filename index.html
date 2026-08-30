@@ -4,118 +4,86 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#050505">
-<meta name="description" content="관람자의 표정, 몸짓, 목소리가 실시간 미디어아트가 되는 접근성 인터랙션 작품">
+<meta name="description" content="움직임과 소리가 자라 하나의 디지털 정원이 되는 접근성 미디어아트">
 <title>me, myself</title>
 <style>
-*{box-sizing:border-box}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050505;color:#fff;
-font-family:system-ui,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
-body{overscroll-behavior:none}
+font-family:system-ui,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body{overscroll-behavior:none;touch-action:none}
 #app{width:100%;height:100svh;position:relative;background:#050505}
-#art{position:absolute;inset:0;width:100%;height:100%}
+#art{position:absolute;inset:0;width:100%;height:100%;display:block}
 #camera{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:.01}
-.ui{position:absolute;inset:0;pointer-events:none}
-.top{position:absolute;top:max(10px,env(safe-area-inset-top));left:10px;right:10px;display:flex;justify-content:space-between;gap:8px;font-size:11px;z-index:5}
-.pill{padding:7px 10px;border-radius:999px;background:rgba(0,0,0,.32);backdrop-filter:blur(10px)}
-.center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(88%,700px);
-text-align:center;transition:opacity 1s;z-index:4}
-.center.hide{opacity:0}
-.center h1{margin:0 0 9px;font-size:clamp(26px,7vw,50px);line-height:1.13;text-shadow:0 3px 24px rgba(0,0,0,.45)}
-.center p{margin:0;font-size:14px;line-height:1.6;color:rgba(255,255,255,.75)}
-#speech{position:absolute;z-index:4;left:14px;right:14px;bottom:82px;min-height:20px;text-align:center;
-font-size:14px;text-shadow:0 2px 18px #000}
-.metrics{position:absolute;z-index:4;left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));
-display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
-.metric{padding:7px 2px;border-radius:10px;background:rgba(0,0,0,.28);backdrop-filter:blur(8px);text-align:center}
-.metric small,.metric strong{display:block}.metric small{font-size:9px;color:rgba(255,255,255,.5)}
-.metric strong{font-size:11px;margin-top:2px}
-#error{display:none;position:absolute;z-index:10;left:14px;right:14px;top:50%;transform:translateY(-50%);
-padding:18px;border-radius:18px;background:rgba(0,0,0,.88);border:1px solid rgba(255,255,255,.14);
-text-align:center;line-height:1.65;font-size:14px;pointer-events:auto}
-#tapFallback{display:none;position:absolute;z-index:11;left:16px;right:16px;bottom:128px;
-padding:12px;text-align:center;border-radius:15px;background:rgba(255,255,255,.1);backdrop-filter:blur(8px);
-font-size:12px;pointer-events:auto}
+.title{position:absolute;z-index:3;top:max(18px,env(safe-area-inset-top));left:0;right:0;
+text-align:center;font-size:12px;letter-spacing:.14em;font-weight:400;
+color:rgba(255,255,255,.55);opacity:1;transition:opacity 3.5s ease;pointer-events:none}
+.title.settle{opacity:.1}
+#error{display:none;position:absolute;z-index:10;left:16px;right:16px;top:50%;transform:translateY(-50%);
+padding:16px;border-radius:16px;background:rgba(0,0,0,.82);border:1px solid rgba(255,255,255,.1);
+text-align:center;line-height:1.6;font-size:13px;color:rgba(255,255,255,.85);pointer-events:none}
 </style>
 </head>
 <body>
 <div id="app">
   <canvas id="art"></canvas>
   <video id="camera" autoplay muted playsinline></video>
-
-  <div class="ui">
-    <div class="top">
-      <span class="pill" id="deviceState">camera-mic</span>
-      <span class="pill" id="mood">interacting</span>
-    </div>
-
-    <div class="center" id="intro">
-      <h1>당신의 감상이<br>움직입니다.</h1>
-      <p>표정 · 몸짓 · 목소리가 화면의 움직임이 됩니다.</p>
-    </div>
-
-    <div id="speech"></div>
-
-    <div class="metrics">
-      <div class="metric"><small>몸짓</small><strong id="mv">-</strong></div>
-      <div class="metric"><small>표정</small><strong id="face">-</strong></div>
-      <div class="metric"><small>음량</small><strong id="vol">-</strong></div>
-      <div class="metric"><small>피치</small><strong id="pit">-</strong></div>
-      <div class="metric"><small>분위기</small><strong id="md">-</strong></div>
-    </div>
-
-    <div id="tapFallback">
-      소리 출력을 시작하려면 화면을 한 번 터치하세요.
-    </div>
-    <div id="error"></div>
-  </div>
+  <div class="title" id="title">me, myself</div>
+  <div id="error"></div>
 </div>
 
 <script type="module">
-const $ = (id)=>document.getElementById(id);
-const canvas = $("art");
-const ctx = canvas.getContext("2d");
-const video = $("camera");
+/* ---------------------------------------------------------------
+   설정값 (추후 튜닝 및 프로젝션 맵핑 이식을 위해 분리)
+--------------------------------------------------------------- */
+const CONFIG={
+  maxTips:18,
+  maxBranches:260,
+  maxNodes:520,
+  maxGroundSeeds:5,
+  branchPointsFlush:40,
+  ambientParticles:70
+};
 
+const TONAL_MAP=[
+  {name:"calm",   energyRange:[0,.35], tensionRange:[0,.5], baseFreq:196, ratios:[1,9/8,5/4,4/3,3/2,5/3,15/8], filter:900,  wave:"sine",     hue:150},
+  {name:"mid",    energyRange:[.3,.7], tensionRange:[0,.6], baseFreq:220, ratios:[1,9/8,6/5,4/3,3/2,8/5,9/5],  filter:1500, wave:"triangle", hue:45},
+  {name:"bright", energyRange:[.6,1],  tensionRange:[0,.5], baseFreq:262, ratios:[1,9/8,5/4,45/32,3/2,27/16,15/8], filter:2600, wave:"triangle", hue:20},
+  {name:"tense",  energyRange:[.4,1],  tensionRange:[.55,1],baseFreq:233, ratios:[1,25/24,7/6,45/32,3/2,25/16,11/6], filter:3400, wave:"sawtooth", hue:300}
+];
+
+/* ---------------------------------------------------------------
+   기본 유틸
+--------------------------------------------------------------- */
+const $=(id)=>document.getElementById(id);
+const clamp01=(v)=>v<0?0:v>1?1:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+function lerpAngle(a,b,t){
+  let d=((b-a+Math.PI*3)%(Math.PI*2))-Math.PI;
+  return a+d*t;
+}
+function variance(arr){
+  if(arr.length<2)return 0;
+  const m=arr.reduce((s,v)=>s+v,0)/arr.length;
+  return arr.reduce((s,v)=>s+(v-m)*(v-m),0)/arr.length;
+}
+function pickScale(energy,tension){
+  let best=TONAL_MAP[0],bd=Infinity;
+  for(const s of TONAL_MAP){
+    const ec=(s.energyRange[0]+s.energyRange[1])/2;
+    const tc=(s.tensionRange[0]+s.tensionRange[1])/2;
+    const d=(energy-ec)**2+(tension-tc)**2;
+    if(d<bd){bd=d;best=s}
+  }
+  return best;
+}
+
+/* ---------------------------------------------------------------
+   캔버스
+--------------------------------------------------------------- */
+const canvas=$("art"),ctx=canvas.getContext("2d");
+const video=$("camera");
 let W=1,H=1,dpr=1;
-let cameraStream=null, micStream=null;
-let audioCtx=null, analyser=null, audioData=null;
-let prevPixels=null, sampleCanvas=null, sampleCtx=null;
-let faceLandmarker=null, faceReady=false, lastVideoTime=-1;
-let speechRecognition=null;
-let audioUnlocked=false;
-let lastTone=0,lastVibrate=0;
-let firstReaction=false;
-
-const S={
-  motion:0.02,
-  volume:0.02,
-  pitch:0.35,
-  face:0,
-  smile:0,
-  jaw:0,
-  brow:0,
-  headX:.5,
-  headY:.5,
-  mood:"neutral",
-  pulse:0
-};
-
-const MOODS={
-  neutral:{name:"중립",h:205,speed:.68,density:.55,shake:0},
-  calm:{name:"편안",h:145,speed:.34,density:.42,shake:0},
-  happy:{name:"즐거움",h:55,speed:1.06,density:.92,shake:0},
-  excited:{name:"신남",h:18,speed:1.55,density:1.08,shake:.1},
-  tense:{name:"긴장",h:320,speed:1.30,density:.72,shake:.42},
-  sad:{name:"슬픔",h:235,speed:.28,density:.25,shake:0},
-  curious:{name:"흥미",h:275,speed:1.35,density:1.04,shake:.12}
-};
-
-const particles=Array.from({length:340},()=>({
-  x:Math.random(),y:Math.random(),z:.1+Math.random()*.9,
-  phase:Math.random()*Math.PI*2,size:.7+Math.random()*3.2,
-  speed:.5+Math.random()*1.8
-}));
-
 function resize(){
   dpr=Math.min(devicePixelRatio||1,2);
   const r=canvas.getBoundingClientRect();
@@ -125,100 +93,80 @@ function resize(){
 }
 addEventListener("resize",resize);resize();
 
-function lerp(a,b,t=.1){return a+(b-a)*t}
+/* ---------------------------------------------------------------
+   입력 상태 (원시 센서 값 - 화면에는 절대 표시하지 않음)
+--------------------------------------------------------------- */
+const S={
+  motion:.02, volume:.02, pitch:.35,
+  face:0, smile:0, jaw:0, brow:0,
+  headX:.5, headY:.5
+};
+const motionCentroid={x:.5,y:.5,mag:0};
 
-function setMood(m){
-  if(!MOODS[m])return;
-  S.mood=m;
-  $("mood").textContent=MOODS[m].name;
-  $("md").textContent=MOODS[m].name;
-  S.pulse=Math.max(S.pulse,.5);
-}
+/* 복합 상태: 그래픽/사운드가 공유하는 단일 작품 언어 */
+const C={energy:.05,tension:0,dirAngle:-Math.PI/2};
+const motionHist=[],pitchHist=[];
 
-function showError(title, detail){
-  $("error").style.display="block";
-  $("error").innerHTML="<b>"+title+"</b><br><br>"+detail;
-}
+let camOK=false,micOK=false,faceModelReady=false;
+let cameraStream=null,micStream=null;
+let audioCtx=null,analyser=null,audioData=null;
+let prevPixels=null,sampleCanvas=null,sampleCtx=null;
+let faceLandmarker=null,lastVideoTime=-1;
+let prevPosX=null,prevPosY=null;
+let lastVibrate=0;
 
-/* 실제 카메라 */
+/* ---------------------------------------------------------------
+   실제 카메라 / 마이크
+--------------------------------------------------------------- */
 async function startCamera(){
-  if(!navigator.mediaDevices?.getUserMedia)
-    throw new Error("이 브라우저는 카메라 API를 지원하지 않습니다.");
-
+  if(!navigator.mediaDevices?.getUserMedia) throw new Error("no camera api");
   cameraStream=await navigator.mediaDevices.getUserMedia({
-    video:{
-      facingMode:{ideal:"user"},
-      width:{ideal:640,min:320},
-      height:{ideal:480,min:240},
-      frameRate:{ideal:30,max:30}
-    },
+    video:{facingMode:{ideal:"user"},width:{ideal:640,min:320},height:{ideal:480,min:240},frameRate:{ideal:30,max:30}},
     audio:false
   });
-
   video.srcObject=cameraStream;
   await video.play();
-
   sampleCanvas=document.createElement("canvas");
-  sampleCanvas.width=48;
-  sampleCanvas.height=36;
+  sampleCanvas.width=48;sampleCanvas.height=36;
   sampleCtx=sampleCanvas.getContext("2d",{willReadFrequently:true});
 }
 
-/* 실제 마이크 */
 async function startMicrophone(){
-  if(!navigator.mediaDevices?.getUserMedia)
-    throw new Error("이 브라우저는 마이크 API를 지원하지 않습니다.");
-
+  if(!navigator.mediaDevices?.getUserMedia) throw new Error("no mic api");
   micStream=await navigator.mediaDevices.getUserMedia({
-    audio:{
-      echoCancellation:true,
-      noiseSuppression:true,
-      autoGainControl:true,
-      channelCount:1
-    },
+    audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1},
     video:false
   });
-
   const AC=window.AudioContext||window.webkitAudioContext;
-  if(!AC) throw new Error("Web Audio API를 지원하지 않습니다.");
-
+  if(!AC) throw new Error("no web audio api");
   audioCtx=new AC();
   analyser=audioCtx.createAnalyser();
   analyser.fftSize=2048;
   analyser.smoothingTimeConstant=.84;
   audioData=new Float32Array(analyser.fftSize);
-
   const source=audioCtx.createMediaStreamSource(micStream);
   source.connect(analyser);
-
-  $("deviceState").textContent="카메라 · 마이크 연결됨";
-
-  if(audioCtx.state==="suspended"){
-    $("tapFallback").style.display="block";
-  }
+  AudioEngine.init(audioCtx);
 }
 
-document.addEventListener("pointerdown",async()=>{
-  if(audioCtx && audioCtx.state==="suspended"){
-    try{
-      await audioCtx.resume();
-      audioUnlocked=true;
-      $("tapFallback").style.display="none";
-    }catch(_){}
-  }
-},{once:false});
+/* 브라우저 정책상 필요한 AudioContext resume - UI 없이 조용히 처리 */
+["pointerdown","touchstart","keydown"].forEach(ev=>{
+  document.addEventListener(ev,()=>{
+    if(audioCtx&&audioCtx.state==="suspended")audioCtx.resume().catch(()=>{});
+  },{passive:true});
+});
+document.addEventListener("touchmove",(e)=>e.preventDefault(),{passive:false});
 
-/* 음량 + 피치 */
+/* ---------------------------------------------------------------
+   음량 + 피치 분석
+--------------------------------------------------------------- */
 function detectPitch(samples,sr){
   let rms=0;
   for(const x of samples)rms+=x*x;
   rms=Math.sqrt(rms/samples.length);
   if(rms<.012)return 0;
-
   let bestLag=-1,best=0;
-  const minLag=Math.floor(sr/500);
-  const maxLag=Math.floor(sr/70);
-
+  const minLag=Math.floor(sr/500),maxLag=Math.floor(sr/70);
   for(let lag=minLag;lag<=maxLag;lag+=2){
     let corr=0;
     for(let i=0;i<samples.length-lag;i+=2)corr+=samples[i]*samples[i+lag];
@@ -231,76 +179,63 @@ function detectPitch(samples,sr){
 function analyzeAudio(){
   if(!analyser)return;
   analyser.getFloatTimeDomainData(audioData);
-
   let sum=0;
   for(const x of audioData)sum+=x*x;
   const rms=Math.sqrt(sum/audioData.length);
   const volume=Math.min(1,rms*5.6);
-
   const hz=detectPitch(audioData,audioCtx.sampleRate);
-  const p=hz?Math.max(0,Math.min(1,(hz-80)/320)):S.pitch;
+  const p=hz?clamp01((hz-80)/320):S.pitch;
 
-  S.volume=lerp(S.volume,volume,.14);
-  S.pitch=lerp(S.pitch,p,.11);
-
-  $("vol").textContent=S.volume>.62?"높음":S.volume>.25?"중간":"낮음";
-  $("pit").textContent=S.pitch>.67?"높음":S.pitch>.34?"중간":"낮음";
+  S.volume=lerp(S.volume,volume,volume>S.volume?.10:.16);
+  S.pitch=lerp(S.pitch,p,.12);
 }
 
-/* 카메라 프레임 변화 = 몸짓 */
+/* ---------------------------------------------------------------
+   카메라 프레임 변화 = 몸짓 + 움직임 중심(방향 fallback)
+--------------------------------------------------------------- */
 function analyzeMotion(){
-  if(!sampleCtx || video.readyState<2 || !video.videoWidth)return;
-
+  if(!sampleCtx||video.readyState<2||!video.videoWidth)return;
   sampleCtx.drawImage(video,0,0,48,36);
   const pixels=sampleCtx.getImageData(0,0,48,36).data;
-
   if(!prevPixels){prevPixels=pixels;return}
 
-  let diff=0;
-  for(let i=0;i<pixels.length;i+=4){
-    diff+=Math.abs(pixels[i]-prevPixels[i]);
-    diff+=Math.abs(pixels[i+1]-prevPixels[i+1]);
-    diff+=Math.abs(pixels[i+2]-prevPixels[i+2]);
+  let diff=0,sx=0,sy=0,sw=0;
+  for(let y=0;y<36;y++){
+    for(let x=0;x<48;x++){
+      const i=(y*48+x)*4;
+      const d=Math.abs(pixels[i]-prevPixels[i])+Math.abs(pixels[i+1]-prevPixels[i+1])+Math.abs(pixels[i+2]-prevPixels[i+2]);
+      diff+=d;
+      if(d>18){sx+=x*d;sy+=y*d;sw+=d}
+    }
   }
-
   const score=Math.min(1,diff/(48*36*110));
   S.motion=lerp(S.motion,score,.18);
+
+  if(sw>0){
+    motionCentroid.x=lerp(motionCentroid.x,sx/sw/48,.25);
+    motionCentroid.y=lerp(motionCentroid.y,sy/sw/36,.25);
+    motionCentroid.mag=lerp(motionCentroid.mag,Math.min(1,sw/(48*36*110)),.3);
+  }else{
+    motionCentroid.mag=lerp(motionCentroid.mag,0,.2);
+  }
   prevPixels=pixels;
-  $("mv").textContent=S.motion>.62?"큼":S.motion>.25?"중간":"작음";
 }
 
-/* 표정 = MediaPipe Face Landmarker */
+/* ---------------------------------------------------------------
+   표정 = MediaPipe Face Landmarker (얼굴 위치/변화만 사용, 감정 진단 없음)
+--------------------------------------------------------------- */
 async function loadFaceModel(){
   if(!cameraStream)return;
-
   try{
-    // GitHub Pages에서 실행되므로 외부 모델을 HTTPS로 로딩
-    const vision=await import(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm"
-    );
-
-    const fileset=await vision.FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
-    );
-
+    const vision=await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/+esm");
+    const fileset=await vision.FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm");
     faceLandmarker=await vision.FaceLandmarker.createFromOptions(fileset,{
-      baseOptions:{
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-        delegate:"GPU"
-      },
-      runningMode:"VIDEO",
-      numFaces:1,
-      outputFaceBlendshapes:true,
-      minFaceDetectionConfidence:.45,
-      minFacePresenceConfidence:.45,
-      minTrackingConfidence:.45
+      baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",delegate:"GPU"},
+      runningMode:"VIDEO",numFaces:1,outputFaceBlendshapes:true,
+      minFaceDetectionConfidence:.45,minFacePresenceConfidence:.45,minTrackingConfidence:.45
     });
-
-    faceReady=true;
-  }catch(e){
-    console.warn("Face model failed",e);
-  }
+    faceModelReady=true;
+  }catch(e){ console.warn("face model unavailable, falling back to motion-only",e); }
 }
 
 function blend(result,name){
@@ -309,224 +244,332 @@ function blend(result,name){
 }
 
 function analyzeFace(){
-  if(!faceReady||video.readyState<2)return;
+  if(!faceModelReady||video.readyState<2)return;
   if(video.currentTime===lastVideoTime)return;
   lastVideoTime=video.currentTime;
-
   let result;
-  try{
-    result=faceLandmarker.detectForVideo(video,performance.now());
-  }catch(_){return}
+  try{ result=faceLandmarker.detectForVideo(video,performance.now()); }catch(_){ return }
 
   if(!result.faceLandmarks?.length){
     S.face=lerp(S.face,0,.14);
-    $("face").textContent="-";
     return;
   }
-
   S.face=lerp(S.face,1,.18);
-
   const lm=result.faceLandmarks[0];
   const nose=lm[1]||lm[4];
   if(nose){
     S.headX=lerp(S.headX,nose.x,.15);
     S.headY=lerp(S.headY,nose.y,.15);
   }
-
-  S.smile=lerp(S.smile,
-    (blend(result,"mouthSmileLeft")+blend(result,"mouthSmileRight"))/2,.18);
+  S.smile=lerp(S.smile,(blend(result,"mouthSmileLeft")+blend(result,"mouthSmileRight"))/2,.18);
   S.jaw=lerp(S.jaw,blend(result,"jawOpen"),.18);
   S.brow=lerp(S.brow,blend(result,"browInnerUp"),.18);
+}
 
-  if(S.smile>.55){
-    $("face").textContent="미소";
-    setMood("happy");
-  }else if(S.jaw>.62 && S.brow>.32){
-    $("face").textContent="표현 증가";
-    setMood("excited");
-  }else if(S.brow>.55){
-    $("face").textContent="눈썹 변화";
-    setMood("curious");
-  }else{
-    $("face").textContent="미세 표정";
+/* ---------------------------------------------------------------
+   복합 상태 도출: motion+volume+pitch+face -> energy / tension / 방향
+--------------------------------------------------------------- */
+function deriveComposite(){
+  const expression=S.smile*.6+S.jaw*.35+S.brow*.35;
+  const rawEnergy=clamp01(S.motion*.4+S.volume*.35+expression*.15+Math.abs(S.pitch-.5)*.2);
+  C.energy=lerp(C.energy,rawEnergy,.05);
+
+  motionHist.push(S.motion); if(motionHist.length>30)motionHist.shift();
+  pitchHist.push(S.pitch); if(pitchHist.length>30)pitchHist.shift();
+  const rawTension=clamp01(variance(motionHist)*10+variance(pitchHist)*6);
+  C.tension=lerp(C.tension,rawTension,.05);
+
+  let posX=null,posY=null,active=false;
+  if(faceModelReady&&S.face>.3){ posX=S.headX;posY=S.headY;active=true; }
+  else if(motionCentroid.mag>.02){ posX=motionCentroid.x;posY=motionCentroid.y;active=true; }
+
+  if(active&&prevPosX!=null){
+    const dx=posX-prevPosX, dy=posY-prevPosY;
+    if(Math.hypot(dx,dy)>.002){
+      C.dirAngle=lerpAngle(C.dirAngle,Math.atan2(dy,dx),.15);
+    }
+  }
+  if(posX!=null){prevPosX=posX;prevPosY=posY}
+
+  if(!camOK){
+    const target=-Math.PI/2+(S.pitch-.5)*1.4+Math.sin(performance.now()*.00015)*.3;
+    C.dirAngle=lerpAngle(C.dirAngle,target,.03);
   }
 }
 
-/* 음성 내용 */
-function setupSpeech(){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR)return;
+/* ---------------------------------------------------------------
+   Digital Garden 엔진
+   입력(S,C)만 소비하는 순수 상태로 분리 -> 프로젝션 맵핑 캔버스에서도 재사용 가능
+--------------------------------------------------------------- */
+const Garden={tips:[],branches:[],nodes:[],groundSeeds:0,lastSeedTime:0};
 
-  speechRecognition=new SR();
-  speechRecognition.lang="ko-KR";
-  speechRecognition.continuous=true;
-  speechRecognition.interimResults=true;
-
-  speechRecognition.onresult=(e)=>{
-    let text="";
-    for(let i=e.resultIndex;i<e.results.length;i++)
-      text+=e.results[i][0].transcript+" ";
-    text=text.trim();
-    if(!text)return;
-
-    $("speech").textContent="“"+text+"”";
-
-    const t=text.replace(/\s+/g,"");
-    if(/편안|편해|따뜻|차분|평온|포근/.test(t))setMood("calm");
-    else if(/좋아|좋다|즐거|기뻐/.test(t))setMood("happy");
-    else if(/신나|강렬|짜릿/.test(t))setMood("excited");
-    else if(/무서|두려|불안|긴장/.test(t))setMood("tense");
-    else if(/슬퍼|슬픔|우울|외로/.test(t))setMood("sad");
-    else if(/재밌|재미|신기|흥미|궁금/.test(t))setMood("curious");
-  };
-
-  speechRecognition.onend=()=>setTimeout(()=>{
-    try{speechRecognition.start()}catch(_){}
-  },600);
+function newTip(x,y,angle,hue,width){
+  return {x,y,angle,hue,width,points:[{x,y}],length:0,branchAccum:0,born:performance.now()};
 }
 
-/* 햅틱 */
+function seedGround(x){
+  Garden.tips.push(newTip(x,H*.86,-Math.PI/2+(Math.random()-.5)*.3,pickScale(C.energy,C.tension).hue,3.2));
+  Garden.groundSeeds++;
+}
+
+function spawnBranch(parent){
+  if(Garden.tips.length>=CONFIG.maxTips){
+    commitTip(Garden.tips.shift());
+  }
+  const sign=Math.random()<.5?-1:1;
+  const angle=parent.angle+sign*(.35+Math.random()*.4);
+  Garden.tips.push(newTip(parent.x,parent.y,angle,parent.hue+(Math.random()-.5)*30,parent.width*.72));
+}
+
+function spawnNode(tip){
+  Garden.nodes.push({
+    x:tip.x,y:tip.y,
+    size:2+S.volume*11,
+    hue:tip.hue+S.pitch*40,
+    bloom:S.volume>.55,
+    born:performance.now()
+  });
+  if(Garden.nodes.length>CONFIG.maxNodes)Garden.nodes.shift();
+}
+
+function commitTip(tip){
+  if(tip.points.length>1){
+    Garden.branches.push({points:tip.points,width:tip.width,hue:tip.hue});
+    if(Garden.branches.length>CONFIG.maxBranches)Garden.branches.shift();
+  }
+}
+
+function flushTip(tip){
+  commitTip({points:tip.points,width:tip.width,hue:tip.hue});
+  tip.points=[{x:tip.x,y:tip.y}];
+}
+
+function growGarden(dt,now){
+  if(!Garden.tips.length)seedGround(W*.5);
+
+  if(C.energy>.5 && now-Garden.lastSeedTime>18000 && Garden.groundSeeds<CONFIG.maxGroundSeeds){
+    seedGround(W*(.15+Math.random()*.7));
+    Garden.lastSeedTime=now;
+  }
+
+  for(const tip of Garden.tips){
+    const pitchBias=-Math.PI/2+(S.pitch-.5)*1.1;
+    const target=lerpAngle(C.dirAngle,pitchBias,.5);
+    tip.angle=lerpAngle(tip.angle,target,.08);
+
+    const growSpeed=3+C.energy*55+S.volume*35;
+    const dist=growSpeed*dt;
+    tip.x+=Math.cos(tip.angle)*dist;
+    tip.y+=Math.sin(tip.angle)*dist;
+    tip.x=Math.max(0,Math.min(W,tip.x));
+    tip.y=Math.max(0,Math.min(H,tip.y));
+    tip.points.push({x:tip.x,y:tip.y});
+    tip.length+=dist;
+    tip.branchAccum+=dist;
+
+    const branchThreshold=150-S.volume*80;
+    if(tip.branchAccum>branchThreshold){
+      spawnBranch(tip);
+      tip.branchAccum=0;
+    }
+    if(S.volume>.5&&Math.random()<.015+C.energy*.05){
+      spawnNode(tip);
+      AudioEngine.pluck();
+      haptic();
+    }
+    if(tip.points.length>CONFIG.branchPointsFlush)flushTip(tip);
+  }
+}
+
 function haptic(){
   if(!navigator.vibrate)return;
   const now=performance.now();
-  if(now-lastVibrate<1200)return;
+  if(now-lastVibrate<1400)return;
   lastVibrate=now;
-  try{navigator.vibrate([20])}catch(_){}
+  try{navigator.vibrate(16)}catch(_){}
 }
 
-/* 사운드 */
-function playTone(){
-  if(!audioCtx||audioCtx.state!=="running")return;
-  const now=performance.now();
-  if(now-lastTone<1200)return;
-  lastTone=now;
+/* ---------------------------------------------------------------
+   렌더링 (state -> pixels, 별도 캔버스/크기에도 재사용 가능)
+--------------------------------------------------------------- */
+const ambient=Array.from({length:CONFIG.ambientParticles},()=>({
+  x:Math.random(),y:Math.random(),z:.1+Math.random()*.9,
+  phase:Math.random()*Math.PI*2,speed:.4+Math.random()*1.2
+}));
 
-  const t=audioCtx.currentTime;
-  const osc=audioCtx.createOscillator();
-  const gain=audioCtx.createGain();
-  const m=MOODS[S.mood];
-
-  osc.type="sine";
-  osc.frequency.value=180+S.pitch*520+m.speed*45;
-
-  gain.gain.setValueAtTime(.0001,t);
-  gain.gain.exponentialRampToValueAtTime(.012+S.volume*.03,t+.02);
-  gain.gain.exponentialRampToValueAtTime(.0001,t+.18);
-
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.start(t);
-  osc.stop(t+.19);
-}
-
-function react(){
-  const expression=S.smile*.7+S.jaw*.45+S.brow*.35;
-  const energy=Math.min(1,.12+S.motion*.38+S.volume*.28+expression*.4);
-
-  if(!firstReaction && (S.motion>.13||S.volume>.10||S.face>.4)){
-    firstReaction=true;
-    $("intro").classList.add("hide");
+function strokePath(points,width,hue,alpha){
+  if(points.length<2)return;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x,points[0].y);
+  for(let i=1;i<points.length-1;i++){
+    const mx=(points[i].x+points[i+1].x)/2;
+    const my=(points[i].y+points[i+1].y)/2;
+    ctx.quadraticCurveTo(points[i].x,points[i].y,mx,my);
   }
-
-  S.pulse=lerp(S.pulse,energy,.12);
-
-  if(S.motion>.70||S.volume>.72||S.smile>.68){
-    haptic();
-    playTone();
-  }
+  ctx.lineCap="round";ctx.lineJoin="round";
+  ctx.lineWidth=width;
+  ctx.strokeStyle=`hsla(${hue},70%,62%,${alpha})`;
+  ctx.stroke();
 }
 
-function render(t){
-  const m=MOODS[S.mood];
-  ctx.fillStyle="rgba(5,5,5,.16)";
+function renderGarden(t){
+  ctx.fillStyle="#050505";
   ctx.fillRect(0,0,W,H);
 
-  // 고개 위치를 작품 중심에 연결
-  const cx=W/2+(S.headX-.5)*W*.48;
-  const cy=H/2+(S.headY-.5)*H*.30;
-  const hue=m.h+S.pitch*36+S.smile*25;
-
-  const count=Math.floor(
-    50+m.density*100+S.motion*95+S.jaw*40+S.smile*35
-  );
-
-  for(let i=0;i<count;i++){
-    const p=particles[i%particles.length];
-    const angle=p.phase+t/1000*m.speed*p.speed+S.pitch*p.z*1.7;
-    const radius=(24+p.z*Math.min(W,H)*.4)*(.55+S.motion*.95);
-
-    let x=cx+Math.cos(angle)*radius*(.72+p.x*.5);
-    let y=cy+Math.sin(angle*1.16)*radius*(.52+p.y*.6);
-
-    const shake=m.shake*(S.motion+S.jaw*.5)*46;
-    x+=Math.sin(t/34+p.phase)*shake;
-    y+=Math.cos(t/42+p.phase)*shake;
-
-    const size=(.8+p.size*(.75+S.volume*2.15+S.smile*.7))*(1+S.pulse*.25);
-    const alpha=Math.min(.95,.10+p.z*.55+S.motion*.24+S.volume*.18+S.face*.1);
-
+  for(const p of ambient){
+    const angle=p.phase+t/4000*p.speed;
+    const x=p.x*W+Math.cos(angle)*14;
+    const y=p.y*H+Math.sin(angle*1.3)*14;
+    const alpha=.04+p.z*.05+C.energy*.05;
     ctx.beginPath();
-    ctx.arc(x,y,size,0,Math.PI*2);
-    ctx.fillStyle=`hsla(${hue+p.z*44},86%,${60+p.z*21}%,${alpha})`;
+    ctx.arc(x,y,.6+p.z*1.4,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,255,255,${alpha})`;
     ctx.fill();
   }
 
-  const core=35+S.volume*130+S.motion*75+S.jaw*55+S.smile*30;
-  const g=ctx.createRadialGradient(cx,cy,0,cx,cy,core*2.8);
-  g.addColorStop(0,`hsla(${hue},95%,80%,.28)`);
-  g.addColorStop(.42,`hsla(${hue+22},90%,64%,.10)`);
-  g.addColorStop(1,`hsla(${hue+55},90%,40%,0)`);
+  for(const b of Garden.branches)strokePath(b.points,b.width,b.hue,.5);
+  for(const tip of Garden.tips)strokePath(tip.points,tip.width,tip.hue,.72);
 
-  ctx.fillStyle=g;
-  ctx.beginPath();
-  ctx.arc(cx,cy,core*2.8,0,Math.PI*2);
-  ctx.fill();
+  const now=performance.now();
+  for(const n of Garden.nodes){
+    const age=(now-n.born)/1000;
+    const alpha=Math.min(.9,age*2)*(n.bloom?.85:.6);
+    const g=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,n.size*(n.bloom?3.2:1.8));
+    g.addColorStop(0,`hsla(${n.hue},90%,75%,${alpha})`);
+    g.addColorStop(1,`hsla(${n.hue},90%,50%,0)`);
+    ctx.fillStyle=g;
+    ctx.beginPath();
+    ctx.arc(n.x,n.y,n.size*(n.bloom?3.2:1.8),0,Math.PI*2);
+    ctx.fill();
+    if(n.bloom){
+      for(let k=0;k<5;k++){
+        const a=k/5*Math.PI*2;
+        const px=n.x+Math.cos(a)*n.size*1.6;
+        const py=n.y+Math.sin(a)*n.size*1.6;
+        ctx.beginPath();
+        ctx.arc(px,py,n.size*.55,0,Math.PI*2);
+        ctx.fillStyle=`hsla(${n.hue+k*8},85%,72%,${alpha*.7})`;
+        ctx.fill();
+      }
+    }
+  }
 
+  const px=faceModelReady&&S.face>.3?S.headX*W:motionCentroid.x*W;
+  const py=faceModelReady&&S.face>.3?S.headY*H:motionCentroid.y*H;
+  const glowR=40+C.energy*90;
+  const scale=pickScale(C.energy,C.tension);
+  const g2=ctx.createRadialGradient(px,py,0,px,py,glowR);
+  g2.addColorStop(0,`hsla(${scale.hue},85%,75%,${.10+C.energy*.12})`);
+  g2.addColorStop(1,`hsla(${scale.hue},85%,50%,0)`);
+  ctx.fillStyle=g2;
+  ctx.beginPath();ctx.arc(px,py,glowR,0,Math.PI*2);ctx.fill();
+}
+
+function render(t){
+  renderGarden(t);
   requestAnimationFrame(render);
+}
+
+/* ---------------------------------------------------------------
+   사운드 엔진: 드론(pad) + 성장 이벤트에 반응하는 pluck
+   화성/음계 매핑은 TONAL_MAP 하나로 분리되어 있어 자유롭게 교체 가능
+--------------------------------------------------------------- */
+const AudioEngine={
+  ctx:null,padGain:null,padFilter:null,osc1:null,osc2:null,lastPluck:0,
+  init(ac){
+    this.ctx=ac;
+    this.padFilter=ac.createBiquadFilter();
+    this.padFilter.type="lowpass";
+    this.padFilter.frequency.value=900;
+
+    this.padGain=ac.createGain();
+    this.padGain.gain.value=0;
+
+    this.osc1=ac.createOscillator();
+    this.osc2=ac.createOscillator();
+    this.osc1.type="sine";
+    this.osc2.type="sine";
+    this.osc1.frequency.value=196;
+    this.osc2.frequency.value=196*1.5;
+    this.osc1.connect(this.padFilter);
+    this.osc2.connect(this.padFilter);
+    this.padFilter.connect(this.padGain);
+    this.padGain.connect(ac.destination);
+    this.osc1.start();this.osc2.start();
+  },
+  update(){
+    if(!this.ctx||this.ctx.state!=="running")return;
+    const scale=pickScale(C.energy,C.tension);
+    const t=this.ctx.currentTime;
+    const targetGain=.015+C.energy*.045;
+    this.padGain.gain.setTargetAtTime(targetGain,t,.4);
+    this.padFilter.frequency.setTargetAtTime(scale.filter*.4+S.pitch*700,t,.5);
+    this.osc1.frequency.setTargetAtTime(scale.baseFreq,t,.6);
+    this.osc2.frequency.setTargetAtTime(scale.baseFreq*scale.ratios[2]+C.tension*6,t,.6);
+    this.osc1.type=scale.wave==="sawtooth"?"triangle":scale.wave;
+  },
+  pluck(){
+    if(!this.ctx||this.ctx.state!=="running")return;
+    const now=performance.now();
+    const minGap=180-Math.min(100,S.motion*80);
+    if(now-this.lastPluck<minGap)return;
+    this.lastPluck=now;
+
+    const scale=pickScale(C.energy,C.tension);
+    const idx=Math.min(scale.ratios.length-1,Math.floor(S.pitch*scale.ratios.length));
+    const freq=scale.baseFreq*2*scale.ratios[idx];
+
+    const t=this.ctx.currentTime;
+    const osc=this.ctx.createOscillator();
+    const gain=this.ctx.createGain();
+    osc.type=scale.wave;
+    osc.frequency.value=freq;
+    gain.gain.setValueAtTime(.0001,t);
+    gain.gain.exponentialRampToValueAtTime(.01+S.volume*.05,t+.02);
+    gain.gain.exponentialRampToValueAtTime(.0001,t+.5);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(t);osc.stop(t+.52);
+  }
+};
+
+/* ---------------------------------------------------------------
+   부트스트랩
+--------------------------------------------------------------- */
+function showError(html){
+  $("error").style.display="block";
+  $("error").innerHTML=html;
 }
 
 async function init(){
   requestAnimationFrame(render);
 
-  // 1. 실제 장치 권한을 가장 먼저 요청
-  let camOK=false,micOK=false;
+  setTimeout(()=>$("title").classList.add("settle"),5000);
 
-  try{await startCamera();camOK=true}
-  catch(e){console.error("camera",e)}
+  try{ await startCamera(); camOK=true }catch(e){ console.warn("camera unavailable",e) }
+  try{ await startMicrophone(); micOK=true }catch(e){ console.warn("microphone unavailable",e) }
 
-  try{await startMicrophone();micOK=true}
-  catch(e){console.error("microphone",e)}
-
-  if(camOK && micOK){
-    $("deviceState").textContent="카메라 · 마이크 인터랙션 중";
-  }else if(camOK){
-    $("deviceState").textContent="카메라 인터랙션 중";
-  }else if(micOK){
-    $("deviceState").textContent="마이크 인터랙션 중";
-  }else{
-    showError(
-      "카메라·마이크 연결 실패",
-      "브라우저에서 이 사이트의 카메라와 마이크 권한을 허용했는지 확인하세요.<br><br>"+
-      "GitHub Pages 주소(<b>https://...github.io</b>)에서 실행해야 합니다."
-    );
+  if(!camOK&&!micOK){
+    showError("카메라와 마이크를 사용할 수 없습니다.<br>브라우저 권한을 확인해 주세요.");
+    return;
   }
-
-  // 2. 장치가 연결된 뒤 얼굴 모델을 별도로 로딩
   if(camOK)loadFaceModel();
 
-  // 3. 음성인식
-  setupSpeech();
-  if(speechRecognition){
-    try{speechRecognition.start()}catch(_){}
-  }
-
-  // 4. 실시간 분석
   setInterval(()=>{
     analyzeMotion();
     analyzeAudio();
     analyzeFace();
-    react();
-  },90);
+    deriveComposite();
+    AudioEngine.update();
+  },80);
+
+  let lastTick=performance.now();
+  setInterval(()=>{
+    const now=performance.now();
+    const dt=Math.min(.25,(now-lastTick)/1000);
+    lastTick=now;
+    growGarden(dt,now);
+  },80);
 }
 
 init();
