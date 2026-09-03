@@ -137,6 +137,7 @@ function saveExperience(){
       summary:summarizeExperience(EXPERIENCE_LOG)
     }));
   }catch(_){}
+  savePhenotype();
 }
 
 function recordExperience(event){
@@ -183,6 +184,62 @@ const SESSION_STYLE=computeSessionStyle();
 function sessionHue(h){return h+SESSION_STYLE.hueBias*.18}
 
 /* ---------------------------------------------------------------
+   표현형 기억: 텍스트 로그가 아니라 "여러 번의 감상이 쌓인 결과"를
+   화면 위 흔적(위치·색·밀도)으로 직접 보여주는 영구 상태.
+   이름/영상/음성 없이 방문 횟수·행동 종류·평균 에너지만 누적한다.
+--------------------------------------------------------------- */
+const PHENOTYPE_KEY="kdac2608_phenotype_v1";
+function loadPhenotype(){
+  try{
+    const raw=localStorage.getItem(PHENOTYPE_KEY);
+    if(raw)return JSON.parse(raw);
+  }catch(_){}
+  return{visits:0,totalInteractions:0,actionCounts:{},energySum:0,energyCount:0,
+    traceSeed:Math.floor(Math.random()*1e9),firstVisit:Date.now()};
+}
+const PHENOTYPE=loadPhenotype();
+PHENOTYPE.visits+=1;
+PHENOTYPE.lastVisit=Date.now();
+
+function savePhenotype(){
+  try{localStorage.setItem(PHENOTYPE_KEY,JSON.stringify(PHENOTYPE))}catch(_){}
+}
+
+function growPhenotype(action){
+  PHENOTYPE.totalInteractions++;
+  PHENOTYPE.actionCounts[action]=(PHENOTYPE.actionCounts[action]||0)+1;
+  PHENOTYPE.energySum+=C.energy;
+  PHENOTYPE.energyCount++;
+}
+
+/* 누적된 감상을 결정론적 좌표로 펼쳐 "당신이 남긴 흔적"을 매번 같은 자리에,
+   그러나 방문할수록 더 짙게 드러낸다 */
+function mulberry32(a){
+  return function(){
+    let t=a+=0x6D2B79F5;
+    t=Math.imul(t^t>>>15,t|1);
+    t^=t+Math.imul(t^t>>>7,t|61);
+    return ((t^t>>>14)>>>0)/4294967296;
+  };
+}
+function buildMemoryField(){
+  if(!PHENOTYPE.totalInteractions)return[];
+  const rng=mulberry32(PHENOTYPE.traceSeed);
+  const count=Math.min(46,Math.round(PHENOTYPE.totalInteractions*.55)+PHENOTYPE.visits*2);
+  const hueByAction={movement:150,voice:45,"high-pitch":45,"low-pitch":45,touch:300,gaze:200,smile:20,open:20,presence:180};
+  const dominant=Object.entries(PHENOTYPE.actionCounts).sort((a,b)=>b[1]-a[1])[0]?.[0];
+  const hueBase=hueByAction[dominant]??180;
+  const avgEnergy=PHENOTYPE.energyCount?PHENOTYPE.energySum/PHENOTYPE.energyCount:.3;
+  const field=[];
+  for(let i=0;i<count;i++){
+    field.push({x:rng(),y:rng(),size:1+rng()*2.1+avgEnergy*1.4,hue:hueBase+(rng()-.5)*50,phase:rng()*Math.PI*2,speed:.15+rng()*.4});
+  }
+  return field;
+}
+let MEMORY_FIELD=[];
+let greetedReturn=false;
+
+/* ---------------------------------------------------------------
    행동 해석: 절대 크기가 아니라 "무엇을 했는가"와 "직전과 달라졌는가"를
    함께 본다. 새로운 행동이 들어올 때마다 작품에 일회성 사건을 일으킨다.
 --------------------------------------------------------------- */
@@ -223,6 +280,7 @@ function triggerNoveltyEvent(action){
   queueNarration(randomItem(DOCENT_LINES.newAction));
   lastNarrationAt=performance.now();
   recordExperience({action,duration:0});
+  growPhenotype(action);
 }
 
 function updateInteraction(now){
@@ -694,6 +752,11 @@ const DOCENT_LINES={
     "방금 전과 다른 움직임이 들어왔어요.",
     "새로운 행동을 작품이 알아차렸습니다.",
     "조금 전과는 다른 변화가 시작되고 있어요."
+  ],
+  memory:[
+    "이전에 남긴 흔적이 오늘의 시작에도 함께 있어요.",
+    "예전의 감상이 오늘의 정원 아래에 조용히 남아 있습니다.",
+    "당신이 다녀간 자리가 배경처럼 은은하게 머물고 있어요."
   ]
 };
 let lastLine="";
@@ -706,6 +769,10 @@ function randomItem(arr){
 }
 
 function buildNarration(action){
+  if(PHENOTYPE.visits>1&&!greetedReturn&&performance.now()-InteractionState.sessionStart<8000){
+    greetedReturn=true;
+    return randomItem(DOCENT_LINES.memory);
+  }
   if(InteractionState.novelty>.65)return randomItem(DOCENT_LINES.newAction);
   if(action==="movement")return randomItem(DOCENT_LINES.movement);
   if(action==="touch")return randomItem(DOCENT_LINES.touch);
@@ -794,6 +861,21 @@ function strokePath(points,width,hue,alpha){
   ctx.stroke();
 }
 
+/* 표현형 기억: 이전 방문들이 남긴 흔적을 살아있는 정원 아래에 아주 은은하게 겹쳐 그린다 */
+function drawMemoryField(t){
+  if(!MEMORY_FIELD.length)return;
+  for(const m of MEMORY_FIELD){
+    const angle=m.phase+t/6000*m.speed;
+    const x=m.x*W+Math.cos(angle)*10;
+    const y=m.y*H+Math.sin(angle*1.2)*10;
+    const alpha=Math.max(.02,.07+Math.sin(angle*.7+m.phase)*.03);
+    ctx.beginPath();
+    ctx.arc(x,y,m.size,0,Math.PI*2);
+    ctx.fillStyle=`hsla(${sessionHue(m.hue)},60%,70%,${alpha})`;
+    ctx.fill();
+  }
+}
+
 function renderGarden(t){
   const scale=pickScale(C.energy,C.tension);
   /* 생동감: 현재 에너지(증폭)+순간 변화량이 합쳐져 화면 전체가 늘고 줄고 밝아지고 어두워진다 */
@@ -803,6 +885,7 @@ function renderGarden(t){
   ctx.fillRect(0,0,W,H);
   ctx.fillStyle=`hsla(${scale.hue},55%,8%,${.05+C.impulse*.07})`;
   ctx.fillRect(0,0,W,H);
+  drawMemoryField(t);
 
   const visibleAmbient=Math.min(ambient.length,Math.floor((14+vitality*125)*SESSION_STYLE.density));
   for(let i=0;i<visibleAmbient;i++){
@@ -986,6 +1069,7 @@ function showError(html){
 let currentAction="presence";
 async function init(){
   applyOpeningMode();
+  MEMORY_FIELD=buildMemoryField();
   requestAnimationFrame(render);
 
   setTimeout(()=>$("title").classList.add("settle"),5000);
