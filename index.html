@@ -89,6 +89,159 @@ function pickScale(energy,tension){
 }
 
 /* ---------------------------------------------------------------
+   감상의 기록: 익명 세션ID + 이벤트 로그를 localStorage에 저장.
+   이름/얼굴/원본 음성 등 식별 가능한 정보는 절대 저장하지 않는다.
+--------------------------------------------------------------- */
+const EXPERIENCE_KEY="kdac2608_experience_v2";
+const SESSION_ID=(Math.random().toString(36).slice(2,10)+Date.now().toString(36)).slice(0,16);
+const EXPERIENCE_LOG=[];
+let lastSaveAt=0;
+
+function summarizeExperience(events){
+  if(!events||!events.length)return null;
+  const counts={};
+  let eSum=0,tSum=0,longestPresence=0,curPresence=0;
+  for(const e of events){
+    counts[e.action]=(counts[e.action]||0)+1;
+    eSum+=e.energy;tSum+=e.tension;
+    if(e.action==="presence"){curPresence++;longestPresence=Math.max(longestPresence,curPresence)}
+    else curPresence=0;
+  }
+  const dominantAction=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
+  return{
+    dominantAction,
+    totalInteractions:events.length,
+    averageEnergy:Number((eSum/events.length).toFixed(3)),
+    averageTension:Number((tSum/events.length).toFixed(3)),
+    longestPresence
+  };
+}
+
+function loadPriorSummary(){
+  try{
+    const raw=localStorage.getItem(EXPERIENCE_KEY);
+    if(!raw)return null;
+    const data=JSON.parse(raw);
+    return data?.summary||null;
+  }catch(_){return null}
+}
+
+function saveExperience(){
+  try{
+    localStorage.setItem(EXPERIENCE_KEY,JSON.stringify({
+      version:2,
+      sessionId:SESSION_ID,
+      openedAt:Date.now(),
+      session:{style:SESSION_STYLE.openingMode,soundMode:SESSION_STYLE.soundMode},
+      events:EXPERIENCE_LOG,
+      summary:summarizeExperience(EXPERIENCE_LOG)
+    }));
+  }catch(_){}
+}
+
+function recordExperience(event){
+  EXPERIENCE_LOG.push({
+    t:Date.now(),
+    action:event.action,
+    energy:Number(C.energy.toFixed(3)),
+    tension:Number(C.tension.toFixed(3)),
+    direction:Number(C.dirAngle.toFixed(3)),
+    duration:Number((event.duration||0).toFixed(2)),
+    novelty:Number(InteractionState.novelty.toFixed(3))
+  });
+  if(EXPERIENCE_LOG.length>120)EXPERIENCE_LOG.shift();
+  const now=performance.now();
+  if(now-lastSaveAt>4000){lastSaveAt=now;saveExperience()}
+}
+
+/* ---------------------------------------------------------------
+   세션 연출 프로필: 접속마다 다른 시작을 만들고, 지난 감상 경향을
+   약하게 반영한다 (조용했던 이전 감상 -> 다음은 더 적극적으로 등)
+--------------------------------------------------------------- */
+function computeSessionStyle(){
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  const style={
+    seed:crypto.getRandomValues(new Uint32Array(1))[0],
+    tempo:rand(.72,1.28),
+    softness:rand(.45,.95),
+    hueBias:Math.random()*360,
+    density:rand(.65,1.35),
+    soundMode:["air","string","bell","drone"][Math.floor(Math.random()*4)],
+    openingMode:["slow-bloom","quiet-center","wide-breath","single-seed","floating-light"][Math.floor(Math.random()*5)]
+  };
+  const prior=loadPriorSummary();
+  if(prior){
+    if(prior.averageEnergy>.55){style.tempo*=.72;style.density*=.8}
+    else if(prior.averageEnergy<.22){style.tempo*=1.25;style.density*=1.15}
+    if(prior.dominantAction==="voice"||prior.dominantAction==="high-pitch"||prior.dominantAction==="low-pitch"){
+      style.soundMode=Math.random()<.6?"bell":"string";
+    }
+  }
+  return style;
+}
+const SESSION_STYLE=computeSessionStyle();
+function sessionHue(h){return h+SESSION_STYLE.hueBias*.18}
+
+/* ---------------------------------------------------------------
+   행동 해석: 절대 크기가 아니라 "무엇을 했는가"와 "직전과 달라졌는가"를
+   함께 본다. 새로운 행동이 들어올 때마다 작품에 일회성 사건을 일으킨다.
+--------------------------------------------------------------- */
+const InteractionState={
+  lastAction:"none",actionCount:0,recentActions:[],novelty:0,
+  sessionStart:performance.now()
+};
+
+function detectAction(){
+  const actions=[];
+  if(S.motion>.18)actions.push("movement");
+  if(S.volume>.18)actions.push("voice");
+  if(S.pitch>.68)actions.push("high-pitch");
+  if(S.pitch<.34)actions.push("low-pitch");
+  if(S.smile>.42)actions.push("smile");
+  if(S.jaw>.45)actions.push("open");
+  if(Math.abs(S.gazeX)+Math.abs(S.gazeY)>.18)actions.push("gaze");
+  if(S.touch>.18)actions.push("touch");
+  if(!actions.length)actions.push("presence");
+  return actions;
+}
+
+function primaryAction(actions){
+  const priority=["voice","high-pitch","low-pitch","touch","movement","gaze","smile","open","presence"];
+  for(const p of priority)if(actions.includes(p))return p;
+  return actions[0];
+}
+
+function triggerNoveltyEvent(action){
+  if(Garden.tips.length){
+    const t=Garden.tips[Math.floor(Math.random()*Garden.tips.length)];
+    spawnBranch(t);
+    spawnNode(t);
+    if(performance.now()-InteractionState.sessionStart>60000)spawnNode(t);
+  }
+  AudioEngine.sparkle();
+  haptic();
+  queueNarration(randomItem(DOCENT_LINES.newAction));
+  lastNarrationAt=performance.now();
+  recordExperience({action,duration:0});
+}
+
+function updateInteraction(now){
+  const actions=detectAction();
+  const action=primaryAction(actions);
+  if(action!==InteractionState.lastAction&&action!=="presence"){
+    InteractionState.novelty=1;
+    InteractionState.actionCount++;
+    triggerNoveltyEvent(action);
+  }else{
+    InteractionState.novelty*=.94;
+  }
+  InteractionState.lastAction=action;
+  InteractionState.recentActions.push({action,t:now});
+  if(InteractionState.recentActions.length>24)InteractionState.recentActions.shift();
+  return action;
+}
+
+/* ---------------------------------------------------------------
    캔버스
 --------------------------------------------------------------- */
 const canvas=$("art"),ctx=canvas.getContext("2d");
@@ -128,7 +281,6 @@ let faceLandmarker=null,lastVideoTime=-1;
 let prevPosX=null,prevPosY=null;
 let lastVibrate=0;
 let pointerDownAt=null,touchLast=null;
-let lastSrUpdate=0;
 
 /* ---------------------------------------------------------------
    실제 카메라 / 마이크
@@ -379,8 +531,34 @@ function newTip(x,y,angle,hue,width){
 }
 
 function seedGround(x){
-  Garden.tips.push(newTip(x,H*.86,-Math.PI/2+(Math.random()-.5)*.3,pickScale(C.energy,C.tension).hue,3.2));
+  Garden.tips.push(newTip(x,H*.86,-Math.PI/2+(Math.random()-.5)*.3,sessionHue(pickScale(C.energy,C.tension).hue),3.2));
   Garden.groundSeeds++;
+}
+
+/* 접속마다 다른 시작 연출: 같은 화면이 반복된다는 인상을 주지 않는다 */
+function applyOpeningMode(){
+  switch(SESSION_STYLE.openingMode){
+    case "quiet-center":
+      seedGround(W*.5);
+      C.energy=.02;
+      SESSION_STYLE.tempo*=.6;
+      break;
+    case "wide-breath":
+      seedGround(W*.3);seedGround(W*.7);
+      C.energy=.12;
+      break;
+    case "single-seed":
+      seedGround(W*(.2+Math.random()*.6));
+      C.energy=.03;
+      break;
+    case "floating-light":
+      C.energy=.08;
+      SESSION_STYLE.tempo*=.85;
+      break;
+    default: /* slow-bloom */
+      seedGround(W*.5);
+      C.energy=.05;
+  }
 }
 
 function spawnBranch(parent){
@@ -439,9 +617,9 @@ function growGarden(dt,now){
     const pitchBias=-Math.PI/2+(S.pitch-.5)*1.1;
     const target=lerpAngle(C.dirAngle,pitchBias,.5);
     tip.angle=lerpAngle(tip.angle,target,.08);
-    tip.hue=lerp(tip.hue,pickScale(C.energy,C.tension).hue,.02+C.impulse*.12);
+    tip.hue=lerp(tip.hue,sessionHue(pickScale(C.energy,C.tension).hue),.02+C.impulse*.12);
 
-    const growSpeed=10+C.energy*115+bv*90+bm*40;
+    const growSpeed=(10+C.energy*115+bv*90+bm*40)*SESSION_STYLE.tempo;
     const dist=growSpeed*dt;
     tip.x+=Math.cos(tip.angle)*dist;
     tip.y+=Math.sin(tip.angle)*dist;
@@ -451,7 +629,7 @@ function growGarden(dt,now){
     tip.length+=dist;
     tip.branchAccum+=dist;
 
-    const branchThreshold=Math.max(22,85-bv*75-C.energy*40);
+    const branchThreshold=Math.max(22,(85-bv*75-C.energy*40)/SESSION_STYLE.tempo);
     if(tip.branchAccum>branchThreshold){
       spawnBranch(tip);
       tip.branchAccum=0;
@@ -474,50 +652,71 @@ function haptic(){
 }
 
 /* ---------------------------------------------------------------
-   시각장애 사용자를 위한 음성 리딩용 텍스트 출력
-   화면 하단에 작고 낮은 opacity로도 표시하고, aria-live + SpeechSynthesis로 직접 소리내어 읽는다
-   매번 같은 문장을 반복하지 않도록 트렌드/방향/색/성장 중 서로 다른 측면을 번갈아 언급해
-   화면이 바뀌는 대로 계속 다른 이야기를 들려주는 내레이션에 가깝게 구성한다
+   도슨트 내레이션: 상태를 나열하지 않고 관찰 + 은유 + 다음 변화를 향한
+   열린 문장으로 구성된 짧은 문장 풀에서 매번 다른 조합을 골라 들려준다.
+   행동 종류에 따라 다른 풀을 쓰고, 새로운 행동이 들어오면 즉시 반응한다.
 --------------------------------------------------------------- */
-const energyTrend=[];
-const MOOD_TEXT={calm:"초록빛 고요함",mid:"따뜻한 노을빛",bright:"밝은 주황빛 생동감",tense:"진한 자줏빛 긴장감"};
-
-function angleWord(a){
-  const deg=((a*180/Math.PI)+360)%360;
-  const dirs=["오른쪽","오른쪽 아래","아래","왼쪽 아래","왼쪽","왼쪽 위","위","오른쪽 위"];
-  return dirs[Math.round(deg/45)%8];
+const DOCENT_LINES={
+  presence:[
+    "지금 화면은 당신의 움직임을 천천히 따라가고 있어요.",
+    "잠시 머물고 있군요. 작품도 함께 멈춰 있습니다.",
+    "아주 작은 변화가 화면 안에 남아 있어요."
+  ],
+  movement:[
+    "움직임이 조금씩 공간을 넓히고 있어요.",
+    "당신이 움직인 방향으로 가지가 길게 이어집니다.",
+    "방금의 움직임이 화면 안에 하나의 흔적을 남겼어요."
+  ],
+  quiet:[
+    "지금은 조금 조용한 시간이 이어지고 있어요.",
+    "아무것도 하지 않아도 작품은 계속 자라고 있어요.",
+    "잠시 쉬어가는 동안 화면의 빛이 천천히 가라앉습니다."
+  ],
+  voice:[
+    "당신의 목소리가 작은 울림으로 남았습니다.",
+    "소리가 들어오자 화면의 밀도가 조금 달라졌어요.",
+    "방금의 목소리가 새로운 결을 만들고 있어요."
+  ],
+  touch:[
+    "닿은 자리에서 작은 파동이 퍼져 나가요.",
+    "머무는 손끝을 따라 정원이 천천히 자랍니다.",
+    "당신이 지나간 방향으로 화면이 기울어요."
+  ],
+  gaze:[
+    "시선이 머문 쪽으로 정원의 중심이 움직이고 있어요.",
+    "바라보는 곳을 따라 화면이 천천히 몸을 돌립니다."
+  ],
+  expression:[
+    "표정이 스치자 빛깔이 조금 밝아졌어요.",
+    "작은 표정 하나가 화면의 색을 바꾸고 있어요."
+  ],
+  newAction:[
+    "방금 전과 다른 움직임이 들어왔어요.",
+    "새로운 행동을 작품이 알아차렸습니다.",
+    "조금 전과는 다른 변화가 시작되고 있어요."
+  ]
+};
+let lastLine="";
+function randomItem(arr){
+  if(arr.length<2)return arr[0];
+  let pick;
+  do{pick=arr[Math.floor(Math.random()*arr.length)]}while(pick===lastLine);
+  lastLine=pick;
+  return pick;
 }
 
-function describeGarden(now){
-  const scale=pickScale(C.energy,C.tension);
-  const past=energyTrend[0];
-  const dEnergy=past?C.energy-past.energy:0;
-  const dTension=past?C.tension-past.tension:0;
-
-  let trend;
-  if(!past||(Math.abs(dEnergy)<.06&&Math.abs(dTension)<.08)) trend="비슷한 흐름을 유지하고 있어요";
-  else if(dEnergy>.06&&dTension>.08) trend="점점 강렬하고 불안정해지고 있어요";
-  else if(dEnergy>.06) trend="점점 활발해지고 있어요";
-  else if(dEnergy<-.06&&dTension<-.05) trend="점점 차분하고 안정되어가고 있어요";
-  else if(dEnergy<-.06) trend="점점 잔잔해지고 있어요";
-  else if(dTension>.08) trend="점점 불규칙해지고 있어요";
-  else trend="조금씩 변화하고 있어요";
-
-  const total=Garden.branches.length+Garden.tips.length;
-  const growth=total>60?"정원이 무성하게 뻗어나갔어요":total>20?"정원이 가지를 뻗어가고 있어요":"정원이 막 싹을 틔웠어요";
-  const direction=`지금은 ${angleWord(C.dirAngle)} 방향으로 자라고 있어요`;
-  const mood=`${MOOD_TEXT[scale.name]}이 느껴지는 정원이에요`;
-  const justBloomed=Garden.nodes.some(n=>n.bloom&&now-n.born<2600);
-
-  /* 감정(에너지/화성)은 매번 반드시 언급하고, 방향/성장 중 하나만 번갈아 곁들인다 */
-  const extras=[direction,growth];
-  const pick=extras[Math.floor(Math.random()*extras.length)];
-  let sentence=`${trend}. ${mood}. ${pick}.`;
-  if(justBloomed)sentence+=" 방금 하나의 꽃이 피었어요.";
-  return sentence;
+function buildNarration(action){
+  if(InteractionState.novelty>.65)return randomItem(DOCENT_LINES.newAction);
+  if(action==="movement")return randomItem(DOCENT_LINES.movement);
+  if(action==="touch")return randomItem(DOCENT_LINES.touch);
+  if(action==="gaze")return randomItem(DOCENT_LINES.gaze);
+  if(action==="smile"||action==="open")return randomItem(DOCENT_LINES.expression);
+  if(action==="voice"||action==="high-pitch"||action==="low-pitch")return randomItem(DOCENT_LINES.voice);
+  if(C.energy<.28)return randomItem(DOCENT_LINES.quiet);
+  return randomItem(DOCENT_LINES.presence);
 }
 
-/* 도슨트처럼 차분하고 다정한 한국어 여성 음성을 우선 선택 */
+/* 도슨트처럼 차분하고 다정한 한국어 음성을 우선 선택. 찾지 못하면 화면 텍스트만 남기고 음성은 생략 */
 let docentVoice=null;
 function pickDocentVoice(){
   if(!("speechSynthesis" in window))return null;
@@ -535,36 +734,41 @@ if("speechSynthesis" in window){
   speechSynthesis.onvoiceschanged=()=>{ docentVoice=pickDocentVoice(); };
 }
 
-let lastSpokenText="",lastSpeakTime=0;
-function speakDescription(text){
-  /* 실제 한국어 음성을 찾지 못하면 기기가 엉뚱한 언어/성별 기본 음성으로 대신 읽어버리므로,
-     그 경우엔 화면 텍스트만 남기고 음성은 아예 재생하지 않는다 */
+/* 문장을 큐에 담아 하나씩 부드럽게 이어 말한다. 즉시 겹쳐 말하지 않는다 */
+let narrationQueue=[],speaking=false;
+function queueNarration(text){
+  if(!text)return;
+  if(narrationQueue[narrationQueue.length-1]===text)return;
+  narrationQueue.push(text);
+  if(narrationQueue.length>3)narrationQueue.shift();
+  playNextNarration();
+}
+function playNextNarration(){
+  if(speaking||!narrationQueue.length)return;
+  const text=narrationQueue.shift();
+  const el=$("srDesc");
+  if(el)el.textContent=text;
   if(!("speechSynthesis" in window)||!docentVoice)return;
-  const now=performance.now();
-  if(text===lastSpokenText||now-lastSpeakTime<9000)return;
-  lastSpokenText=text;
-  lastSpeakTime=now;
+  speaking=true;
   try{
     speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(text);
     u.lang="ko-KR";
     u.voice=docentVoice;
-    u.rate=.92;
-    u.pitch=1.08;
-    u.volume=.85;
+    u.rate=.82;
+    u.pitch=1.02;
+    u.volume=.68;
+    u.onend=()=>{speaking=false;setTimeout(playNextNarration,500)};
+    u.onerror=()=>{speaking=false};
     speechSynthesis.speak(u);
-  }catch(_){}
+  }catch(_){speaking=false}
 }
 
-function updateAccessibilityText(now){
-  if(now-lastSrUpdate<CONFIG.srUpdateInterval)return;
-  lastSrUpdate=now;
-  const text=describeGarden(now);
-  const el=$("srDesc");
-  if(el)el.textContent=text;
-  speakDescription(text);
-  energyTrend.push({t:now,energy:C.energy,tension:C.tension});
-  while(energyTrend.length>1&&now-energyTrend[0].t>20000)energyTrend.shift();
+let lastNarrationAt=0;
+function updateAccessibilityText(now,action){
+  if(now-lastNarrationAt<CONFIG.srUpdateInterval)return;
+  lastNarrationAt=now;
+  queueNarration(buildNarration(action));
 }
 
 /* ---------------------------------------------------------------
@@ -600,7 +804,7 @@ function renderGarden(t){
   ctx.fillStyle=`hsla(${scale.hue},55%,8%,${.05+C.impulse*.07})`;
   ctx.fillRect(0,0,W,H);
 
-  const visibleAmbient=Math.min(ambient.length,Math.floor(14+vitality*125));
+  const visibleAmbient=Math.min(ambient.length,Math.floor((14+vitality*125)*SESSION_STYLE.density));
   for(let i=0;i<visibleAmbient;i++){
     const p=ambient[i];
     const angle=p.phase+t/4000*p.speed*(1+C.energy*1.4);
@@ -610,7 +814,7 @@ function renderGarden(t){
     const alpha=Math.min(1,(.05+p.z*.08+C.energy*.14)*vitality);
     ctx.beginPath();
     ctx.arc(x,y,.7+p.z*1.9+C.energy*1.2,0,Math.PI*2);
-    ctx.fillStyle=`hsla(${scale.hue+p.z*30},72%,80%,${alpha})`;
+    ctx.fillStyle=`hsla(${sessionHue(scale.hue+p.z*30)},72%,80%,${alpha})`;
     ctx.fill();
   }
 
@@ -647,8 +851,8 @@ function renderGarden(t){
   const py=faceModelReady&&S.face>.3?S.headY*H:motionCentroid.y*H;
   const glowR=55+C.energy*185+C.impulse*75;
   const g2=ctx.createRadialGradient(px,py,0,px,py,glowR);
-  g2.addColorStop(0,`hsla(${scale.hue},90%,78%,${Math.min(1,.16+C.energy*.26+C.impulse*.22)})`);
-  g2.addColorStop(1,`hsla(${scale.hue},90%,50%,0)`);
+  g2.addColorStop(0,`hsla(${sessionHue(scale.hue)},90%,78%,${Math.min(1,.16+C.energy*.26+C.impulse*.22)})`);
+  g2.addColorStop(1,`hsla(${sessionHue(scale.hue)},90%,50%,0)`);
   ctx.fillStyle=g2;
   ctx.beginPath();ctx.arc(px,py,glowR,0,Math.PI*2);ctx.fill();
 }
@@ -662,10 +866,17 @@ function render(t){
    사운드 엔진: 드론(pad) + 성장 이벤트에 반응하는 pluck
    화성/음계 매핑은 TONAL_MAP 하나로 분리되어 있어 자유롭게 교체 가능
 --------------------------------------------------------------- */
+const SOUND_MODE_PARAMS={
+  air:{lfoRate:.12,osc3:"sine",filterMul:1},
+  string:{lfoRate:.22,osc3:"sawtooth",filterMul:1.15},
+  bell:{lfoRate:.08,osc3:"triangle",filterMul:1.3},
+  drone:{lfoRate:.05,osc3:"sine",filterMul:.8}
+};
 const AudioEngine={
   ctx:null,padGain:null,padFilter:null,osc1:null,osc2:null,osc3:null,lfo:null,lfoGain:null,lastPluck:0,
   init(ac){
     this.ctx=ac;
+    this.soundMode=SOUND_MODE_PARAMS[SESSION_STYLE.soundMode]||SOUND_MODE_PARAMS.air;
     this.padFilter=ac.createBiquadFilter();
     this.padFilter.type="lowpass";
     this.padFilter.frequency.value=900;
@@ -678,7 +889,7 @@ const AudioEngine={
     this.osc3=ac.createOscillator();
     this.osc1.type="sine";
     this.osc2.type="sine";
-    this.osc3.type="sine";
+    this.osc3.type=this.soundMode.osc3;
     this.osc1.frequency.value=196;
     this.osc2.frequency.value=196*1.5;
     this.osc3.frequency.value=196*2;
@@ -691,7 +902,7 @@ const AudioEngine={
     this.padGain.connect(ac.destination);
 
     this.lfo=ac.createOscillator();
-    this.lfo.frequency.value=.15;
+    this.lfo.frequency.value=this.soundMode.lfoRate;
     this.lfoGain=ac.createGain();
     this.lfoGain.gain.value=4;
     this.lfo.connect(this.lfoGain);
@@ -705,7 +916,7 @@ const AudioEngine={
     const t=this.ctx.currentTime;
     const targetGain=.02+C.energy*.09;
     this.padGain.gain.setTargetAtTime(targetGain,t,.35);
-    this.padFilter.frequency.setTargetAtTime(scale.filter*.55+S.pitch*1200,t,.4);
+    this.padFilter.frequency.setTargetAtTime((scale.filter*.55+S.pitch*1200)*(this.soundMode?this.soundMode.filterMul:1),t,.4);
     this.osc1.frequency.setTargetAtTime(scale.baseFreq,t,.5);
     this.osc2.frequency.setTargetAtTime(scale.baseFreq*scale.ratios[2]+C.tension*8,t,.5);
     this.osc3.frequency.setTargetAtTime(scale.baseFreq*scale.ratios[4],t,.5);
@@ -772,7 +983,9 @@ function showError(html){
   $("error").innerHTML=html;
 }
 
+let currentAction="presence";
 async function init(){
+  applyOpeningMode();
   requestAnimationFrame(render);
 
   setTimeout(()=>$("title").classList.add("settle"),5000);
@@ -793,18 +1006,25 @@ async function init(){
     analyzeFace();
     analyzeTouch();
     deriveComposite(now);
+    currentAction=updateInteraction(now);
     AudioEngine.update();
   },80);
 
-  let lastTick=performance.now();
+  let lastTick=performance.now(),lastAutoRecord=0;
   setInterval(()=>{
     const now=performance.now();
     const dt=Math.min(.25,(now-lastTick)/1000);
     lastTick=now;
     growGarden(dt,now);
-    updateAccessibilityText(now);
+    updateAccessibilityText(now,currentAction);
+    if(now-lastAutoRecord>10000){
+      lastAutoRecord=now;
+      recordExperience({action:currentAction,duration:(now-InteractionState.sessionStart)/1000});
+    }
   },80);
 }
+
+addEventListener("pagehide",()=>{try{saveExperience()}catch(_){}});
 
 init();
 </script>
