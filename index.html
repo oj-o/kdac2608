@@ -8,24 +8,248 @@
 <title>me, myself</title>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050505;color:#fff;
-font-family:system-ui,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
--webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+html,body{
+  margin:0;width:100%;height:100%;overflow:hidden;background:#050505;color:#fff;
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+}
 body{overscroll-behavior:none;touch-action:none}
-#app{width:100%;height:100svh;position:relative;background:#050505}
-#art{position:absolute;inset:0;width:100%;height:100%;display:block}
+#app{width:100%;height:100svh;position:relative;background:#050505;overflow:hidden}
+#art{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:1}
 #camera{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:.01}
-.title{position:absolute;z-index:3;top:max(18px,env(safe-area-inset-top));left:0;right:0;
-text-align:center;font-size:12px;letter-spacing:.14em;font-weight:400;
-color:rgba(255,255,255,.55);opacity:1;transition:opacity 3.5s ease;pointer-events:none}
+
+.title{
+  position:absolute;z-index:3;top:max(18px,env(safe-area-inset-top));left:0;right:0;
+  text-align:center;font-size:12px;letter-spacing:.14em;font-weight:400;
+  color:rgba(255,255,255,.55);opacity:1;transition:opacity 3.5s ease;pointer-events:none;
+}
 .title.settle{opacity:.1}
-#error{display:none;position:absolute;z-index:10;left:16px;right:16px;top:50%;transform:translateY(-50%);
-padding:16px;border-radius:16px;background:rgba(0,0,0,.82);border:1px solid rgba(255,255,255,.1);
-text-align:center;line-height:1.6;font-size:13px;color:rgba(255,255,255,.85);pointer-events:none}
-.srtext{position:absolute;z-index:3;left:16px;right:16px;bottom:max(16px,env(safe-area-inset-bottom));
-text-align:center;font-size:12px;line-height:1.5;font-weight:300;letter-spacing:.01em;
-color:rgba(255,255,255,.42);text-shadow:0 2px 10px rgba(0,0,0,.6);pointer-events:none;
-transition:opacity 1.2s ease}
+
+#error{
+  display:none;position:absolute;z-index:35;left:16px;right:16px;top:50%;transform:translateY(-50%);
+  padding:16px;border-radius:16px;background:rgba(0,0,0,.88);border:1px solid rgba(255,255,255,.15);
+  text-align:center;line-height:1.6;font-size:13px;color:rgba(255,255,255,.9);pointer-events:none;
+}
+
+.srtext{
+  position:absolute;z-index:3;left:16px;right:16px;bottom:max(16px,env(safe-area-inset-bottom));
+  text-align:center;font-size:12px;line-height:1.5;font-weight:300;letter-spacing:.01em;
+  color:rgba(255,255,255,.42);text-shadow:0 2px 10px rgba(0,0,0,.6);pointer-events:none;
+  transition:opacity 1.2s ease;
+}
+
+/* ---------------- UI 패널 및 인터랙션 컴포넌트 ---------------- */
+.hidden{
+  display:none !important;
+}
+
+.panel{
+  position:absolute;inset:0;z-index:20;display:grid;place-items:center;
+  padding:20px;overflow-y:auto;touch-action:pan-y;
+}
+
+.intro-card,
+.result-card,
+.gallery-card{
+  width:min(92vw,520px);max-height:min(88vh,820px);overflow-y:auto;
+  touch-action:pan-y;padding:26px;border-radius:24px;background:rgba(5,5,5,.84);
+  border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  box-shadow:0 20px 80px rgba(0,0,0,.5);
+}
+
+.intro-card h1,
+.result-card h2,
+.gallery-card h2{
+  margin:0 0 14px;font-weight:600;letter-spacing:-.02em;
+}
+
+.eyebrow{
+  font-size:10px;letter-spacing:.22em;color:rgba(255,255,255,.55);
+  margin-bottom:8px;text-transform:uppercase;
+}
+
+.intro-card p{
+  line-height:1.7;color:rgba(255,255,255,.8);margin:0 0 16px;font-size:14px;
+}
+
+.guide-icons{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:20px 0;
+}
+
+.guide-icons span{
+  padding:12px 14px;border:1px solid rgba(255,255,255,.1);border-radius:14px;
+  font-size:13px;background:rgba(255,255,255,.04);display:flex;flex-direction:column;gap:3px;
+}
+
+.guide-icons span strong{
+  font-weight:500;color:rgba(255,255,255,.94);
+}
+
+.guide-icons span small{
+  font-size:11px;color:rgba(255,255,255,.56);line-height:1.4;
+}
+
+.intro-help{
+  font-size:12.5px;color:rgba(255,255,255,.72);line-height:1.6;margin-bottom:20px;
+}
+
+.intro-accessibility{
+  display:block;margin-top:8px;font-size:11.5px;color:rgba(255,255,255,.52);line-height:1.5;
+}
+
+button{
+  min-height:48px;border:0;border-radius:14px;padding:0 18px;font:inherit;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.94);color:#050505;font-weight:500;
+  transition:transform .15s ease,background .15s ease;
+  user-select:none;-webkit-user-select:none;
+}
+
+button:hover{
+  background:#fff;transform:translateY(-1px);
+}
+
+button:active{
+  transform:translateY(0);
+}
+
+button.secondary{
+  background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.16);
+}
+
+button.secondary:hover{
+  background:rgba(255,255,255,.18);
+}
+
+#startExperienceBtn,
+#finishExperienceBtn{
+  width:100%;
+}
+
+.active-controls{
+  position:absolute;z-index:15;left:16px;right:16px;bottom:max(16px,env(safe-area-inset-bottom));
+  display:flex;justify-content:space-between;align-items:center;gap:10px;pointer-events:none;
+}
+
+.active-controls button{
+  pointer-events:auto;min-height:44px;background:rgba(0,0,0,.55);color:#fff;
+  border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  padding:0 16px;font-size:13px;
+}
+
+.active-controls button:hover{
+  background:rgba(255,255,255,.15);
+}
+
+.face-guide{
+  width:min(65vw,290px);aspect-ratio:.78;border:2px solid rgba(255,255,255,.75);
+  border-radius:50%;box-shadow:0 0 0 9999px rgba(0,0,0,.45),0 0 30px rgba(255,255,255,.16);
+  transition:border-color .3s ease,box-shadow .3s ease;
+}
+
+.face-guide.ready{
+  border-color:rgba(120,255,180,.9);
+  box-shadow:0 0 0 9999px rgba(0,0,0,.45),0 0 36px rgba(120,255,180,.28);
+}
+
+.overlay{
+  position:absolute;inset:0;z-index:19;display:grid;place-items:center;cursor:pointer;
+}
+
+.overlay p{
+  position:absolute;bottom:16%;margin:0;padding:10px 18px;border-radius:24px;
+  background:rgba(0,0,0,.72);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  border:1px solid rgba(255,255,255,.12);font-size:13.5px;color:rgba(255,255,255,.9);
+  text-align:center;max-width:88vw;line-height:1.5;
+}
+
+.status-text{
+  position:absolute;z-index:14;left:16px;right:16px;bottom:78px;text-align:center;
+  font-size:12.5px;color:rgba(255,255,255,.75);pointer-events:none;text-shadow:0 2px 10px rgba(0,0,0,.8);
+  transition:opacity .5s ease;
+}
+
+.result-card label{
+  display:block;margin-top:14px;font-size:13px;color:rgba(255,255,255,.82);
+}
+
+.result-card input,
+.result-card textarea{
+  display:block;width:100%;margin-top:6px;padding:12px 14px;border-radius:12px;
+  border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);color:#fff;
+  font:inherit;font-size:14px;outline:none;user-select:text;-webkit-user-select:text;
+  transition:border-color .2s ease;
+}
+
+.result-card input:focus,
+.result-card textarea:focus{
+  border-color:rgba(255,255,255,.45);background:rgba(255,255,255,.09);
+}
+
+.result-card input::placeholder,
+.result-card textarea::placeholder{
+  color:rgba(255,255,255,.35);
+}
+
+.result-summary{
+  font-size:13px;line-height:1.6;color:rgba(255,255,255,.78);background:rgba(255,255,255,.05);
+  padding:12px 14px;border-radius:14px;border:1px solid rgba(255,255,255,.09);margin-bottom:14px;
+}
+
+.result-preview{
+  width:100%;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.14);
+  margin-bottom:14px;background:#050505;display:flex;justify-content:center;
+}
+
+.result-preview img{
+  display:block;width:100%;height:auto;border-radius:12px;
+}
+
+.result-actions{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px;margin-bottom:10px;
+}
+
+.result-actions button:last-child{
+  grid-column:1/-1;
+}
+
+.gallery-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:16px 0;max-height:55vh;
+  overflow-y:auto;touch-action:pan-y;padding-right:2px;
+}
+
+@media(max-width:480px){
+  .gallery-grid{grid-template-columns:1fr}
+}
+
+.reaction-card{
+  border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.04);display:flex;flex-direction:column;
+}
+
+.reaction-card .reaction-art{
+  width:100%;aspect-ratio:1.25;background:#050505;position:relative;overflow:hidden;
+}
+
+.reaction-card .reaction-art canvas{
+  width:100%;height:100%;display:block;
+}
+
+.reaction-card .reaction-copy{
+  padding:12px;
+}
+
+.reaction-card .reaction-badge{
+  font-size:10px;opacity:.5;letter-spacing:.08em;margin-bottom:4px;text-transform:uppercase;
+}
+
+.reaction-card .reaction-title{
+  font-weight:600;font-size:13.5px;color:rgba(255,255,255,.95);
+}
+
+.reaction-card .reaction-comment{
+  margin-top:6px;font-size:12px;line-height:1.5;color:rgba(255,255,255,.68);
+}
 </style>
 </head>
 <body>
@@ -33,6 +257,101 @@ transition:opacity 1.2s ease}
   <canvas id="art"></canvas>
   <video id="camera" autoplay muted playsinline></video>
   <div class="title" id="title">me, myself</div>
+
+  <!-- INTRO PANEL -->
+  <section id="introPanel" class="panel">
+    <div class="intro-card">
+      <div class="eyebrow">ACCESSIBLE INTERACTIVE ART</div>
+      <h1>me, myself</h1>
+
+      <p>
+        당신의 움직임과 목소리가<br>
+        하나의 작품으로 기록됩니다.
+      </p>
+
+      <div class="guide-icons">
+        <span><strong>◎ 카메라</strong><small>내 얼굴과 움직임을 감지합니다.</small></span>
+        <span><strong>◌ 소리</strong><small>목소리의 크기와 높이를 작품의 소리로 바꿉니다.</small></span>
+        <span><strong>✦ 변화</strong><small>작은 움직임도 빛·가지·꽃의 변화가 됩니다.</small></span>
+        <span><strong>↓ 기록</strong><small>감상이 끝나면 나의 작품을 저장하고 공유할 수 있습니다.</small></span>
+      </div>
+
+      <p class="intro-help">
+        얼굴을 카메라 안에 맞춰 주세요.<br>
+        천천히 움직이거나 말을 걸어 보세요.<br>
+        <span class="intro-accessibility">
+          손을 사용하기 어려워도 괜찮습니다. 머리의 작은 움직임, 눈의 방향, 표정의 변화, 목소리만으로도 작품은 반응합니다. 아무것도 하지 않아도 작품은 당신과 함께 머뭅니다.
+        </span>
+      </p>
+
+      <button id="startExperienceBtn">시작하기</button>
+    </div>
+  </section>
+
+  <!-- CAMERA GUIDE OVERLAY -->
+  <section id="cameraGuide" class="overlay hidden" role="region" aria-label="얼굴 위치 안내">
+    <div class="face-guide"></div>
+    <p id="cameraGuideText">
+      얼굴을 가이드 안에 맞춰 주세요.<br>
+      <small style="opacity:.7;font-size:11px;">(화면을 터치하면 바로 시작할 수 있습니다)</small>
+    </p>
+  </section>
+
+  <!-- ACTIVE CONTROLS -->
+  <div id="activeControls" class="active-controls hidden">
+    <button id="voiceToggleBtn" aria-label="음성 안내 끄기">
+      🔊 음성 안내
+    </button>
+    <button id="finishExperienceBtn">
+      ■ 감상 끝내기
+    </button>
+  </div>
+
+  <!-- READING STATUS -->
+  <div id="statusText" class="status-text" aria-live="polite"></div>
+
+  <!-- RESULT PANEL -->
+  <section id="resultPanel" class="panel hidden">
+    <div class="result-card">
+      <h2>오늘 내가 남긴 감상</h2>
+      <div id="resultSummaryText" class="result-summary"></div>
+
+      <div id="resultArtworkPreview" class="result-preview"></div>
+
+      <label>
+        내가 붙인 제목
+        <input id="reactionTitle" maxlength="40" placeholder="예: 천천히 퍼지는 것">
+      </label>
+
+      <label>
+        한 줄 감상
+        <textarea id="reactionComment" maxlength="100" rows="2" placeholder="이 작품을 보고 나는..."></textarea>
+      </label>
+
+      <div class="result-actions">
+        <button id="saveImageBtn">이미지 저장</button>
+        <button id="saveJsonBtn">기록 저장</button>
+        <button id="shareResultBtn">공유하기</button>
+      </div>
+
+      <button id="openGalleryBtn" class="secondary" style="width:100%;">
+        다른 사람의 감상 보기
+      </button>
+      <button id="restartExperienceBtn" class="secondary" style="width:100%;margin-top:8px;">
+        다시 감상하기
+      </button>
+    </div>
+  </section>
+
+  <!-- GALLERY PANEL -->
+  <section id="galleryPanel" class="panel hidden">
+    <div class="gallery-card">
+      <h2>같은 작품, 다른 반응</h2>
+      <div id="reactionGallery" class="gallery-grid"></div>
+      <button id="closeGalleryBtn" style="width:100%;">닫기</button>
+    </div>
+  </section>
+
   <div id="error"></div>
   <div id="srDesc" class="srtext" role="status" aria-live="polite"></div>
 </div>
@@ -87,6 +406,15 @@ function pickScale(energy,tension){
   }
   return best;
 }
+function escapeHtml(str){
+  if(!str) return "";
+  return String(str)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
+}
 
 /* ---------------------------------------------------------------
    감상의 기록: 익명 세션ID + 이벤트 로그를 localStorage에 저장.
@@ -129,7 +457,7 @@ function loadPriorSummary(){
 function saveExperience(){
   try{
     localStorage.setItem(EXPERIENCE_KEY,JSON.stringify({
-      version:2,
+      version:3,
       sessionId:SESSION_ID,
       openedAt:Date.now(),
       session:{style:SESSION_STYLE.openingMode,soundMode:SESSION_STYLE.soundMode},
@@ -150,7 +478,7 @@ function recordExperience(event){
     duration:Number((event.duration||0).toFixed(2)),
     novelty:Number(InteractionState.novelty.toFixed(3))
   });
-  if(EXPERIENCE_LOG.length>120)EXPERIENCE_LOG.shift();
+  if(EXPERIENCE_LOG.length>140)EXPERIENCE_LOG.shift();
   const now=performance.now();
   if(now-lastSaveAt>4000){lastSaveAt=now;saveExperience()}
 }
@@ -180,7 +508,7 @@ function computeSessionStyle(){
   }
   return style;
 }
-const SESSION_STYLE=computeSessionStyle();
+let SESSION_STYLE=computeSessionStyle();
 function sessionHue(h){return h+SESSION_STYLE.hueBias*.18}
 
 /* ---------------------------------------------------------------
@@ -226,7 +554,7 @@ function buildMemoryField(){
   if(!PHENOTYPE.totalInteractions)return[];
   const rng=mulberry32(PHENOTYPE.traceSeed);
   const count=Math.min(46,Math.round(PHENOTYPE.totalInteractions*.55)+PHENOTYPE.visits*2);
-  const hueByAction={movement:150,voice:45,"high-pitch":45,"low-pitch":45,touch:300,gaze:200,smile:20,open:20,presence:180};
+  const hueByAction={movement:150,voice:45,"high-pitch":45,"low-pitch":45,touch:300,gaze:200,smile:20,open:20,presence:180,"session-start":160};
   const dominant=Object.entries(PHENOTYPE.actionCounts).sort((a,b)=>b[1]-a[1])[0]?.[0];
   const hueBase=hueByAction[dominant]??180;
   const avgEnergy=PHENOTYPE.energyCount?PHENOTYPE.energySum/PHENOTYPE.energyCount:.3;
@@ -296,6 +624,24 @@ function updateInteraction(now){
   InteractionState.lastAction=action;
   InteractionState.recentActions.push({action,t:now});
   if(InteractionState.recentActions.length>24)InteractionState.recentActions.shift();
+
+  // 감상 중 가이드 상태 문구 갱신
+  if(ExperienceUI.active){
+    if(action==="voice"||action==="high-pitch"||action==="low-pitch"){
+      setStatusText("● 목소리가 작품의 소리와 결을 바꾸고 있습니다.");
+    }else if(action==="movement"){
+      setStatusText("● 당신의 움직임이 가지를 뻗어나가게 합니다.");
+    }else if(action==="gaze"){
+      setStatusText("● 시선이 머무는 곳으로 작품이 방향을 바꿉니다.");
+    }else if(action==="smile"||action==="open"){
+      setStatusText("● 작은 표정의 변화가 빛깔을 물들입니다.");
+    }else if(action==="touch"){
+      setStatusText("● 손끝이 머문 자리에서 파동이 퍼집니다.");
+    }else{
+      setStatusText("● 감상 중: 당신의 움직임이 작품으로 바뀌고 있습니다.");
+    }
+  }
+
   return action;
 }
 
@@ -374,20 +720,38 @@ async function startMicrophone(){
   AudioEngine.init(audioCtx);
 }
 
-/* 브라우저 정책상 필요한 AudioContext resume - UI 없이 조용히 처리 */
+async function ensureMediaStreams(){
+  if(!camOK){
+    try{ await startCamera(); camOK=true; loadFaceModel(); }catch(e){ console.warn(e); }
+  }
+  if(!micOK){
+    try{ await startMicrophone(); micOK=true; }catch(e){ console.warn(e); }
+  }
+}
+
+/* 브라우저 정책상 필요한 AudioContext resume */
 ["pointerdown","touchstart","keydown"].forEach(ev=>{
   document.addEventListener(ev,()=>{
     if(audioCtx&&audioCtx.state==="suspended")audioCtx.resume().catch(()=>{});
   },{passive:true});
 });
-document.addEventListener("touchmove",(e)=>e.preventDefault(),{passive:false});
 
-/* 터치는 필수 조작이 아닌 보조 입력 채널 - 압력/이동량/유지시간의 "정도"로 반응 */
+/* 터치 제스처: UI 카드/입력창은 일반 스크롤 허용, 캔버스 배경만 preventDefault */
+document.addEventListener("touchmove",(e)=>{
+  if(e.target.closest(".intro-card, .result-card, .gallery-card, textarea, input, .panel")){
+    return;
+  }
+  e.preventDefault();
+},{passive:false});
+
+/* 터치는 필수 조작이 아닌 보조 입력 채널 */
 document.addEventListener("pointerdown",(e)=>{
+  if(e.target.closest("button, input, textarea, .panel")) return;
   pointerDownAt=performance.now();
   touchLast={x:e.clientX,y:e.clientY};
   S.touchPressure=e.pressure||.55;
 },{passive:true});
+
 document.addEventListener("pointermove",(e)=>{
   if(!touchLast)return;
   const dx=e.clientX-touchLast.x, dy=e.clientY-touchLast.y;
@@ -399,6 +763,7 @@ document.addEventListener("pointermove",(e)=>{
   touchLast={x:e.clientX,y:e.clientY};
   S.touchPressure=e.pressure||S.touchPressure;
 },{passive:true});
+
 document.addEventListener("pointerup",()=>{pointerDownAt=null;touchLast=null},{passive:true});
 document.addEventListener("pointercancel",()=>{pointerDownAt=null;touchLast=null},{passive:true});
 
@@ -520,7 +885,7 @@ function analyzeFace(){
   S.jaw=lerp(S.jaw,blend(result,"jawOpen"),.18);
   S.brow=lerp(S.brow,blend(result,"browInnerUp"),.18);
 
-  /* 눈빛(시선)·눈뜸·깜빡임 - 머리를 움직이기 어려운 사용자도 시선만으로 방향을 만들 수 있게 */
+  /* 눈빛(시선)·눈뜸·깜빡임 */
   S.eyeWide=lerp(S.eyeWide,(blend(result,"eyeWideLeft")+blend(result,"eyeWideRight"))/2,.16);
   S.blink=lerp(S.blink,(blend(result,"eyeBlinkLeft")+blend(result,"eyeBlinkRight"))/2,.3);
   const gx=(blend(result,"eyeLookOutRight")+blend(result,"eyeLookInLeft"))-(blend(result,"eyeLookOutLeft")+blend(result,"eyeLookInRight"));
@@ -537,7 +902,7 @@ function deriveComposite(now){
   const gazeMag=Math.hypot(S.gazeX,S.gazeY);
   const expression=clamp01(S.smile*.45+S.jaw*.22+S.brow*.18+S.eyeWide*.25+S.blink*.08);
 
-  /* 작은 입력도 뚜렷하게: 저입력 구간을 크게 증폭하는 곡선을 통과시킨 뒤 합산 */
+  /* 작은 입력도 뚜렷하게 증폭 */
   const rawEnergy=clamp01((bm*.38+bv*.36+bt*.28+expression*.22+gazeMag*.14+Math.abs(S.pitch-.5)*.22)*1.1);
   C.energy=lerp(C.energy,rawEnergy,.1);
 
@@ -547,7 +912,7 @@ function deriveComposite(now){
   const rawTension=clamp01(variance(motionHist)*14+variance(pitchHist)*9+variance(gazeHist)*10);
   C.tension=lerp(C.tension,rawTension,.08);
 
-  /* 절대 수준이 아닌 "순간 변화량" 자체를 감지해 즉각적인 반응을 만든다 */
+  /* 순간 변화량 */
   const dChange=Math.abs(S.motion-prevRaw.motion)*2.2
     +Math.abs(S.volume-prevRaw.volume)*2.0
     +Math.abs(S.pitch-prevRaw.pitch)*1.6
@@ -558,7 +923,7 @@ function deriveComposite(now){
   C.impulse=Math.max(C.impulse*CONFIG.impulseDecay,rawImpulse);
   prevRaw={motion:S.motion,volume:S.volume,pitch:S.pitch,expr:expression,gaze:gazeMag,touch:S.touch};
 
-  /* 방향 우선순위: 시선(가장 적은 움직임으로 가능) > 머리 위치 > 프레임 움직임 중심 */
+  /* 방향: 시선 > 머리 위치 > 프레임 움직임 중심 */
   let posX=null,posY=null,active=false,fromGaze=false;
   if(faceModelReady&&gazeMag>.1){ posX=.5+S.gazeX*.6;posY=.5+S.gazeY*.6;active=true;fromGaze=true; }
   else if(faceModelReady&&S.face>.3){ posX=S.headX;posY=S.headY;active=true; }
@@ -580,7 +945,6 @@ function deriveComposite(now){
 
 /* ---------------------------------------------------------------
    Digital Garden 엔진
-   입력(S,C)만 소비하는 순수 상태로 분리 -> 프로젝션 맵핑 캔버스에서도 재사용 가능
 --------------------------------------------------------------- */
 const Garden={tips:[],branches:[],nodes:[],groundSeeds:0,lastSeedTime:0,lastImpulseBranch:0};
 
@@ -593,7 +957,6 @@ function seedGround(x){
   Garden.groundSeeds++;
 }
 
-/* 접속마다 다른 시작 연출: 같은 화면이 반복된다는 인상을 주지 않는다 */
 function applyOpeningMode(){
   switch(SESSION_STYLE.openingMode){
     case "quiet-center":
@@ -613,7 +976,7 @@ function applyOpeningMode(){
       C.energy=.08;
       SESSION_STYLE.tempo*=.85;
       break;
-    default: /* slow-bloom */
+    default:
       seedGround(W*.5);
       C.energy=.05;
   }
@@ -640,7 +1003,7 @@ function spawnNode(tip){
 }
 
 function commitTip(tip){
-  if(tip.points.length>1){
+  if(tip&&tip.points.length>1){
     Garden.branches.push({points:tip.points,width:tip.width,hue:tip.hue});
     if(Garden.branches.length>CONFIG.maxBranches)Garden.branches.shift();
   }
@@ -652,6 +1015,7 @@ function flushTip(tip){
 }
 
 function growGarden(dt,now){
+  if(!ExperienceUI.active) return;
   if(!Garden.tips.length)seedGround(W*.5);
 
   if(C.energy>.5 && now-Garden.lastSeedTime>18000 && Garden.groundSeeds<CONFIG.maxGroundSeeds){
@@ -661,7 +1025,6 @@ function growGarden(dt,now){
 
   const bv=boost(S.volume), bm=boost(S.motion);
 
-  /* 순간적인 변화(변화량)는 축적을 기다리지 않고 즉시 하나의 사건으로 나타난다 */
   if(C.impulse>.55 && now-Garden.lastImpulseBranch>CONFIG.impulseBranchCooldown && Garden.tips.length){
     const t=Garden.tips[Math.floor(Math.random()*Garden.tips.length)];
     spawnBranch(t);
@@ -710,9 +1073,7 @@ function haptic(){
 }
 
 /* ---------------------------------------------------------------
-   도슨트 내레이션: 상태를 나열하지 않고 관찰 + 은유 + 다음 변화를 향한
-   열린 문장으로 구성된 짧은 문장 풀에서 매번 다른 조합을 골라 들려준다.
-   행동 종류에 따라 다른 풀을 쓰고, 새로운 행동이 들어오면 즉시 반응한다.
+   도슨트 내레이션
 --------------------------------------------------------------- */
 const DOCENT_LINES={
   presence:[
@@ -783,7 +1144,6 @@ function buildNarration(action){
   return randomItem(DOCENT_LINES.presence);
 }
 
-/* 도슨트처럼 차분하고 다정한 한국어 음성을 우선 선택. 찾지 못하면 화면 텍스트만 남기고 음성은 생략 */
 let docentVoice=null;
 function pickDocentVoice(){
   if(!("speechSynthesis" in window))return null;
@@ -801,7 +1161,6 @@ if("speechSynthesis" in window){
   speechSynthesis.onvoiceschanged=()=>{ docentVoice=pickDocentVoice(); };
 }
 
-/* 문장을 큐에 담아 하나씩 부드럽게 이어 말한다. 즉시 겹쳐 말하지 않는다 */
 let narrationQueue=[],speaking=false;
 function queueNarration(text){
   if(!text)return;
@@ -810,11 +1169,13 @@ function queueNarration(text){
   if(narrationQueue.length>3)narrationQueue.shift();
   playNextNarration();
 }
+
 function playNextNarration(){
   if(speaking||!narrationQueue.length)return;
   const text=narrationQueue.shift();
   const el=$("srDesc");
   if(el)el.textContent=text;
+  if(!voiceEnabled)return;
   if(!("speechSynthesis" in window)||!docentVoice)return;
   speaking=true;
   try{
@@ -839,7 +1200,7 @@ function updateAccessibilityText(now,action){
 }
 
 /* ---------------------------------------------------------------
-   렌더링 (state -> pixels, 별도 캔버스/크기에도 재사용 가능)
+   렌더링
 --------------------------------------------------------------- */
 const ambient=Array.from({length:CONFIG.ambientParticles},()=>({
   x:Math.random(),y:Math.random(),z:.1+Math.random()*.9,
@@ -861,7 +1222,6 @@ function strokePath(points,width,hue,alpha){
   ctx.stroke();
 }
 
-/* 표현형 기억: 이전 방문들이 남긴 흔적을 살아있는 정원 아래에 아주 은은하게 겹쳐 그린다 */
 function drawMemoryField(t){
   if(!MEMORY_FIELD.length)return;
   for(const m of MEMORY_FIELD){
@@ -878,7 +1238,6 @@ function drawMemoryField(t){
 
 function renderGarden(t){
   const scale=pickScale(C.energy,C.tension);
-  /* 생동감: 현재 에너지(증폭)+순간 변화량이 합쳐져 화면 전체가 늘고 줄고 밝아지고 어두워진다 */
   const vitality=.4+boost(C.energy)*.95+C.impulse*.55;
 
   ctx.fillStyle="#050505";
@@ -946,8 +1305,7 @@ function render(t){
 }
 
 /* ---------------------------------------------------------------
-   사운드 엔진: 드론(pad) + 성장 이벤트에 반응하는 pluck
-   화성/음계 매핑은 TONAL_MAP 하나로 분리되어 있어 자유롭게 교체 가능
+   사운드 엔진: 작품 사운드 (도슨트 음성과 독립적 유지)
 --------------------------------------------------------------- */
 const SOUND_MODE_PARAMS={
   air:{lfoRate:.12,osc3:"sine",filterMul:1},
@@ -1059,6 +1417,574 @@ const AudioEngine={
 };
 
 /* ---------------------------------------------------------------
+   경험 세션 제어 및 UI 상태
+--------------------------------------------------------------- */
+const ExperienceUI={
+  active:false,
+  startedAt:0,
+  endedAt:0
+};
+let cameraGuideActive=false;
+let cameraGuideTimer=null;
+
+/* 음성 안내 토글 상태 (도슨트만 켜고 끄며 작품 사운드는 유지) */
+const VOICE_KEY="kdac2608_voice_enabled";
+let voiceEnabled=JSON.parse(localStorage.getItem(VOICE_KEY)??"true");
+
+function updateVoiceButton(){
+  const btn=$("voiceToggleBtn");
+  if(!btn)return;
+  btn.textContent=voiceEnabled?"🔊 음성 안내":"🔇 음성 안내";
+  btn.setAttribute("aria-label",voiceEnabled?"음성 안내 끄기":"음성 안내 켜기");
+}
+
+function setStatusText(msg){
+  const el=$("statusText");
+  if(!el)return;
+  el.textContent=msg;
+}
+
+function updateCameraGuideStatus(){
+  if(!cameraGuideActive||ExperienceUI.active)return;
+  const guideText=$("cameraGuideText");
+  const faceGuide=document.querySelector(".face-guide");
+  if(!guideText||!faceGuide)return;
+
+  if(!camOK){
+    guideText.innerHTML="소리와 움직임으로 반응할 준비를 하고 있습니다.<br><small style='opacity:.7;font-size:11px;'>(화면을 터치하면 바로 시작됩니다)</small>";
+    return;
+  }
+  if(!faceModelReady){
+    guideText.innerHTML="● 얼굴 인식 준비 중...<br><small style='opacity:.7;font-size:11px;'>(화면을 터치하면 바로 시작됩니다)</small>";
+    return;
+  }
+  if(S.face>.35){
+    const offCenterX=Math.abs(S.headX-.5);
+    const offCenterY=Math.abs(S.headY-.5);
+    if(offCenterX>.22||offCenterY>.22){
+      guideText.innerHTML="● 얼굴을 조금 더 가운데로 맞춰 주세요.<br><small style='opacity:.7;font-size:11px;'>(화면을 터치하면 바로 시작됩니다)</small>";
+      faceGuide.classList.remove("ready");
+    }else{
+      guideText.innerHTML="✓ 준비되었습니다<br><small style='opacity:.7;font-size:11px;'>(잠시 후 감상이 시작됩니다)</small>";
+      faceGuide.classList.add("ready");
+      if(!cameraGuideTimer){
+        cameraGuideTimer=setTimeout(()=>{
+          if(cameraGuideActive&&!ExperienceUI.active){
+            beginExperience();
+          }
+        },1200);
+      }
+    }
+  }else{
+    guideText.innerHTML="얼굴을 가이드 안에 맞춰 주세요.<br><small style='opacity:.7;font-size:11px;'>(화면을 터치하면 바로 시작됩니다)</small>";
+    faceGuide.classList.remove("ready");
+  }
+}
+
+async function startExperienceWithGuide(){
+  if(audioCtx&&audioCtx.state==="suspended"){
+    audioCtx.resume().catch(()=>{});
+  }
+  if(!docentVoice&&"speechSynthesis" in window){
+    docentVoice=pickDocentVoice();
+  }
+  ensureMediaStreams();
+
+  $("introPanel").classList.add("hidden");
+  $("cameraGuide").classList.remove("hidden");
+  cameraGuideActive=true;
+  cameraGuideTimer=null;
+  updateCameraGuideStatus();
+
+  setTimeout(()=>{
+    if(cameraGuideActive&&!ExperienceUI.active){
+      beginExperience();
+    }
+  },4000);
+}
+
+function beginExperience(){
+  if(ExperienceUI.active)return;
+  clearTimeout(cameraGuideTimer);
+  cameraGuideTimer=null;
+  cameraGuideActive=false;
+
+  ExperienceUI.active=true;
+  ExperienceUI.startedAt=Date.now();
+  InteractionState.sessionStart=performance.now();
+
+  $("introPanel").classList.add("hidden");
+  $("cameraGuide").classList.add("hidden");
+  $("activeControls").classList.remove("hidden");
+
+  recordExperience({
+    action:"session-start",
+    duration:0
+  });
+  growPhenotype("session-start");
+
+  queueNarration("이제 당신의 움직임과 목소리가 작품 안에 남기 시작합니다.");
+  setStatusText("● 감상 중: 당신의 움직임이 작품으로 바뀌고 있습니다.");
+}
+
+function finishExperience(){
+  if(!ExperienceUI.active)return;
+  ExperienceUI.active=false;
+  ExperienceUI.endedAt=Date.now();
+
+  const durationSec=Math.round((ExperienceUI.endedAt-ExperienceUI.startedAt)/1000);
+  recordExperience({
+    action:"session-end",
+    duration:durationSec
+  });
+  saveExperience();
+
+  $("activeControls").classList.add("hidden");
+  $("statusText").textContent="";
+
+  const summary=summarizeExperience(EXPERIENCE_LOG);
+  let summaryNarrative="당신이 머문 시간 동안 작품은 천천히 바깥으로 퍼졌습니다. 방금의 변화가 하나의 정원으로 남았습니다.";
+  if(summary){
+    if(summary.dominantAction==="voice"||summary.dominantAction==="high-pitch"||summary.dominantAction==="low-pitch"){
+      summaryNarrative="당신의 목소리와 숨결이 소리와 꽃의 빛깔이 되었습니다. 방금의 울림이 하나의 정원으로 남았습니다.";
+    }else if(summary.dominantAction==="movement"){
+      summaryNarrative="당신이 남긴 움직임의 결을 따라 가지가 넓게 퍼져나갔습니다. 방금의 발걸음이 하나의 정원으로 남았습니다.";
+    }else if(summary.dominantAction==="gaze"){
+      summaryNarrative="시선이 머문 자리를 따라 작품의 중심이 조용히 흘러갔습니다. 방금의 눈길이 하나의 정원으로 남았습니다.";
+    }else if(summary.dominantAction==="expression"||summary.dominantAction==="smile"||summary.dominantAction==="open"){
+      summaryNarrative="표정의 잔잔한 변화가 정원의 색과 온도를 바꾸었습니다. 방금의 미소가 하나의 정원으로 남았습니다.";
+    }else if(summary.dominantAction==="touch"){
+      summaryNarrative="손끝이 닿았던 자리마다 부드러운 파동이 번졌습니다. 방금의 온기가 하나의 정원으로 남았습니다.";
+    }
+  }
+
+  const summaryEl=$("resultSummaryText");
+  if(summaryEl)summaryEl.textContent=summaryNarrative;
+
+  const defaultTitles={
+    "slow-bloom":"천천히 퍼지는 것",
+    "quiet-center":"조용한 중심",
+    "wide-breath":"넓은 숨",
+    "single-seed":"하나의 씨앗",
+    "floating-light":"떠도는 빛"
+  };
+  if($("reactionTitle"))$("reactionTitle").value=defaultTitles[SESSION_STYLE.openingMode]||"나의 감상";
+  if($("reactionComment"))$("reactionComment").value=summaryNarrative;
+
+  updateResultPreview();
+  $("resultPanel").classList.remove("hidden");
+
+  queueNarration("감상이 기록되었습니다. 이제 당신이 남긴 작품을 볼 수 있습니다.");
+
+  addSavedReaction({
+    title:$("reactionTitle")?.value||"나의 감상",
+    comment:$("reactionComment")?.value||summaryNarrative,
+    summary,
+    createdAt:new Date().toISOString(),
+    hue:pickScale(C.energy,C.tension).hue
+  });
+}
+
+function restartExperience(){
+  $("resultPanel").classList.add("hidden");
+  $("galleryPanel").classList.add("hidden");
+
+  Garden.tips=[];
+  Garden.branches=[];
+  Garden.nodes=[];
+  Garden.groundSeeds=0;
+  Garden.lastSeedTime=0;
+  Garden.lastImpulseBranch=0;
+
+  SESSION_STYLE=computeSessionStyle();
+  applyOpeningMode();
+  MEMORY_FIELD=buildMemoryField();
+
+  startExperienceWithGuide();
+}
+
+/* ---------------------------------------------------------------
+   이미지 저장 및 공유 기능 (buildReactionCanvas, save, share)
+--------------------------------------------------------------- */
+function wrapText(ctx,text,x,y,maxWidth,lineHeight,maxLines=4){
+  if(!text)return;
+  const words=text.split(" ");
+  let line="";
+  let lineCount=0;
+  for(let n=0;n<words.length;n++){
+    const testLine=line?`${line} ${words[n]}`:words[n];
+    const metrics=ctx.measureText(testLine);
+    if(metrics.width>maxWidth&&n>0){
+      ctx.fillText(line,x,y);
+      line=words[n];
+      y+=lineHeight;
+      lineCount++;
+      if(lineCount>=maxLines-1&&n<words.length-1){
+        line+=" …";
+        break;
+      }
+    }else{
+      line=testLine;
+    }
+  }
+  if(line&&lineCount<maxLines){
+    ctx.fillText(line,x,y);
+  }
+}
+
+function buildReactionCanvas(){
+  const out=document.createElement("canvas");
+  const width=1200;
+  const artH=820;
+  const footerH=380;
+  const height=artH+footerH;
+
+  out.width=width;
+  out.height=height;
+  const octx=out.getContext("2d");
+
+  octx.fillStyle="#050505";
+  octx.fillRect(0,0,width,height);
+
+  if(canvas.width>0&&canvas.height>0){
+    const scale=Math.max(width/canvas.width,artH/canvas.height);
+    const sw=width/scale;
+    const sh=artH/scale;
+    const sx=Math.max(0,(canvas.width-sw)/2);
+    const sy=Math.max(0,(canvas.height-sh)/2);
+    octx.drawImage(canvas,sx,sy,sw,sh,0,0,width,artH);
+  }
+
+  const grad=octx.createLinearGradient(0,artH-90,0,artH);
+  grad.addColorStop(0,"rgba(5,5,5,0)");
+  grad.addColorStop(1,"rgba(5,5,5,0.94)");
+  octx.fillStyle=grad;
+  octx.fillRect(0,artH-90,width,90);
+
+  octx.fillStyle="rgba(255,255,255,0.12)";
+  octx.fillRect(56,artH,width-112,1);
+
+  octx.fillStyle="#050505";
+  octx.fillRect(0,artH+1,width,footerH);
+
+  const title=$("reactionTitle")?.value?.trim()||"나의 감상";
+  const comment=$("reactionComment")?.value?.trim()||"나의 움직임이 작품 안에 남았다.";
+
+  octx.fillStyle="rgba(255,255,255,0.45)";
+  octx.font="500 16px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', sans-serif";
+  octx.fillText("ACCESSIBLE INTERACTIVE ART",56,artH+46);
+
+  octx.fillStyle="rgba(255,255,255,0.96)";
+  octx.font="bold 34px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', sans-serif";
+  octx.fillText(title,56,artH+96);
+
+  octx.fillStyle="rgba(255,255,255,0.72)";
+  octx.font="24px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', sans-serif";
+  wrapText(octx,`“${comment}”`,56,artH+152,width-112,38,4);
+
+  octx.fillStyle="rgba(255,255,255,0.36)";
+  octx.font="16px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', sans-serif";
+  octx.fillText("me, myself",56,height-42);
+
+  const now=new Date();
+  const dateStr=`${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,"0")}.${String(now.getDate()).padStart(2,"0")}`;
+  octx.textAlign="right";
+  octx.fillText(dateStr,width-56,height-42);
+  octx.textAlign="left";
+
+  return out;
+}
+
+function updateResultPreview(){
+  const container=$("resultArtworkPreview");
+  if(!container)return;
+  const out=buildReactionCanvas();
+  container.innerHTML="";
+  const img=document.createElement("img");
+  img.src=out.toDataURL("image/png");
+  img.alt="감상 기록 작품 미리보기";
+  container.appendChild(img);
+}
+
+async function saveReactionImage(){
+  const out=buildReactionCanvas();
+  out.toBlob(blob=>{
+    if(!blob)return;
+    const a=document.createElement("a");
+    const d=new Date();
+    const stamp=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}_${String(d.getHours()).padStart(2,"0")}${String(d.getMinutes()).padStart(2,"0")}`;
+    a.href=URL.createObjectURL(blob);
+    a.download=`me_myself_${stamp}.png`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{
+      a.remove();
+      URL.revokeObjectURL(a.href);
+    },1000);
+  },"image/png");
+}
+
+function createReactionRecord(){
+  return {
+    project:"me, myself",
+    version:"3",
+    createdAt:new Date().toISOString(),
+    title:$("reactionTitle")?.value?.trim()||"나의 감상",
+    comment:$("reactionComment")?.value?.trim()||"",
+    summary:summarizeExperience(EXPERIENCE_LOG),
+    session:{
+      openingMode:SESSION_STYLE.openingMode,
+      soundMode:SESSION_STYLE.soundMode
+    }
+  };
+}
+
+function saveReactionJSON(){
+  const record=createReactionRecord();
+  const blob=new Blob([JSON.stringify(record,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  const d=new Date();
+  const stamp=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}_${String(d.getHours()).padStart(2,"0")}${String(d.getMinutes()).padStart(2,"0")}`;
+  a.href=URL.createObjectURL(blob);
+  a.download=`me_myself_${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  },1000);
+}
+
+async function shareReaction(){
+  const out=buildReactionCanvas();
+  out.toBlob(async blob=>{
+    if(!blob)return;
+    const title=$("reactionTitle")?.value?.trim()||"나의 감상";
+    const comment=$("reactionComment")?.value?.trim()||"me, myself";
+    const file=new File([blob],"me_myself.png",{type:"image/png"});
+
+    try{
+      if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+        await navigator.share({
+          title:`me, myself — ${title}`,
+          text:comment,
+          files:[file]
+        });
+        return;
+      }
+      if(navigator.share){
+        await navigator.share({
+          title:`me, myself — ${title}`,
+          text:`${title}\n${comment}`,
+          url:location.href
+        });
+        return;
+      }
+      if(navigator.clipboard?.writeText){
+        await navigator.clipboard.writeText(`${title}\n${comment}\n${location.href}`);
+        alert("감상 정보와 주소가 클립보드에 복사되었습니다.");
+      }else{
+        alert("공유를 지원하지 않는 브라우저입니다.");
+      }
+    }catch(err){
+      if(err.name!=="AbortError"){
+        console.warn("share failed",err);
+      }
+    }
+  },"image/png");
+}
+
+/* ---------------------------------------------------------------
+   갤러리: 같은 작품, 다른 사람들의 반응
+--------------------------------------------------------------- */
+const DEMO_REACTIONS=[
+  {
+    title:"천천히 퍼지는 것",
+    comment:"아무것도 하지 않아도 작품이 계속 살아 있는 느낌이었다.",
+    hue:150
+  },
+  {
+    title:"움직이는 빛",
+    comment:"고개를 돌릴 때마다 작품의 방향이 달라졌다.",
+    hue:45
+  },
+  {
+    title:"작은 파동",
+    comment:"목소리를 내자 화면에 꽃이 생겨서 신기했다.",
+    hue:280
+  },
+  {
+    title:"나를 닮은 정원",
+    comment:"내가 만든 것인데도 처음 보는 풍경처럼 느껴졌다.",
+    hue:210
+  }
+];
+
+const SAVED_REACTIONS_KEY="kdac2608_saved_reactions_v1";
+function getSavedReactions(){
+  try{
+    const raw=localStorage.getItem(SAVED_REACTIONS_KEY);
+    return raw?JSON.parse(raw):[];
+  }catch(_){return []}
+}
+function addSavedReaction(item){
+  try{
+    const list=getSavedReactions();
+    list.unshift(item);
+    if(list.length>20)list.pop();
+    localStorage.setItem(SAVED_REACTIONS_KEY,JSON.stringify(list));
+  }catch(_){}
+}
+
+function drawMiniArtwork(miniCanvas,hue){
+  const mctx=miniCanvas.getContext("2d");
+  const mw=miniCanvas.width;
+  const mh=miniCanvas.height;
+
+  mctx.fillStyle="#070707";
+  mctx.fillRect(0,0,mw,mh);
+
+  for(let i=0;i<20;i++){
+    const x=Math.random()*mw;
+    const y=Math.random()*mh;
+    const r=0.8+Math.random()*1.8;
+    mctx.beginPath();
+    mctx.arc(x,y,r,0,Math.PI*2);
+    mctx.fillStyle=`hsla(${hue+(Math.random()-.5)*40},70%,75%,${0.2+Math.random()*0.4})`;
+    mctx.fill();
+  }
+
+  mctx.beginPath();
+  mctx.moveTo(mw*.5,mh);
+  const cx1=mw*.4+(Math.sin(hue)*mw*.2);
+  const cy1=mh*.6;
+  const cx2=mw*.6+(Math.cos(hue)*mw*.2);
+  const cy2=mh*.3;
+  const endX=mw*.5+(Math.sin(hue*2)*mw*.25);
+  const endY=mh*.2;
+  mctx.bezierCurveTo(cx1,cy1,cx2,cy2,endX,endY);
+  mctx.strokeStyle=`hsla(${hue},65%,65%,0.85)`;
+  mctx.lineWidth=3;
+  mctx.lineCap="round";
+  mctx.stroke();
+
+  mctx.beginPath();
+  mctx.moveTo(cx1,cy1);
+  mctx.quadraticCurveTo(mw*.2,cy1-30,mw*.25,cy1-60);
+  mctx.strokeStyle=`hsla(${hue+25},65%,60%,0.7)`;
+  mctx.lineWidth=2;
+  mctx.stroke();
+
+  const blooms=[
+    {x:endX,y:endY,r:16,h:hue},
+    {x:mw*.25,y:cy1-60,r:11,h:hue+30},
+    {x:cx2,y:cy2,r:9,h:hue-20}
+  ];
+  for(const b of blooms){
+    const g=mctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r);
+    g.addColorStop(0,`hsla(${b.h},90%,80%,0.9)`);
+    g.addColorStop(0.5,`hsla(${b.h},85%,65%,0.4)`);
+    g.addColorStop(1,`hsla(${b.h},80%,50%,0)`);
+    mctx.fillStyle=g;
+    mctx.beginPath();
+    mctx.arc(b.x,b.y,b.r,0,Math.PI*2);
+    mctx.fill();
+  }
+}
+
+function renderGallery(){
+  const root=$("reactionGallery");
+  if(!root)return;
+  root.innerHTML="";
+
+  const saved=getSavedReactions();
+  const items=[];
+  saved.forEach(s=>{
+    items.push({
+      title:s.title||"나의 감상",
+      comment:s.comment||"",
+      hue:s.hue||150,
+      badge:"나의 기록"
+    });
+  });
+  DEMO_REACTIONS.forEach(d=>{
+    items.push({
+      title:d.title,
+      comment:d.comment,
+      hue:d.hue,
+      badge:"다른 사람의 감상"
+    });
+  });
+
+  for(const item of items){
+    const card=document.createElement("article");
+    card.className="reaction-card";
+
+    const artWrapper=document.createElement("div");
+    artWrapper.className="reaction-art";
+    const miniCanvas=document.createElement("canvas");
+    miniCanvas.width=300;
+    miniCanvas.height=240;
+    drawMiniArtwork(miniCanvas,item.hue);
+    artWrapper.appendChild(miniCanvas);
+
+    const copy=document.createElement("div");
+    copy.className="reaction-copy";
+    copy.innerHTML=`
+      <div class="reaction-badge">${escapeHtml(item.badge)}</div>
+      <div class="reaction-title">${escapeHtml(item.title)}</div>
+      <div class="reaction-comment">${escapeHtml(item.comment)}</div>
+    `;
+
+    card.appendChild(artWrapper);
+    card.appendChild(copy);
+    root.appendChild(card);
+  }
+}
+
+function openGallery(){
+  renderGallery();
+  $("galleryPanel").classList.remove("hidden");
+}
+
+function closeGallery(){
+  $("galleryPanel").classList.add("hidden");
+}
+
+/* ---------------------------------------------------------------
+   이벤트 연결
+--------------------------------------------------------------- */
+$("startExperienceBtn")?.addEventListener("click",startExperienceWithGuide);
+$("cameraGuide")?.addEventListener("click",beginExperience);
+$("finishExperienceBtn")?.addEventListener("click",finishExperience);
+$("saveImageBtn")?.addEventListener("click",saveReactionImage);
+$("saveJsonBtn")?.addEventListener("click",saveReactionJSON);
+$("shareResultBtn")?.addEventListener("click",shareReaction);
+$("openGalleryBtn")?.addEventListener("click",openGallery);
+$("closeGalleryBtn")?.addEventListener("click",closeGallery);
+$("restartExperienceBtn")?.addEventListener("click",restartExperience);
+
+let previewTimer=null;
+function onInputUpdate(){
+  clearTimeout(previewTimer);
+  previewTimer=setTimeout(updateResultPreview,120);
+}
+$("reactionTitle")?.addEventListener("input",onInputUpdate);
+$("reactionComment")?.addEventListener("input",onInputUpdate);
+
+$("voiceToggleBtn")?.addEventListener("click",()=>{
+  voiceEnabled=!voiceEnabled;
+  localStorage.setItem(VOICE_KEY,JSON.stringify(voiceEnabled));
+  if(!voiceEnabled&&"speechSynthesis" in window){
+    speechSynthesis.cancel();
+    narrationQueue=[];
+    speaking=false;
+  }
+  updateVoiceButton();
+});
+updateVoiceButton();
+
+/* ---------------------------------------------------------------
    부트스트랩
 --------------------------------------------------------------- */
 function showError(html){
@@ -1072,15 +1998,10 @@ async function init(){
   MEMORY_FIELD=buildMemoryField();
   requestAnimationFrame(render);
 
-  setTimeout(()=>$("title").classList.add("settle"),5000);
+  setTimeout(()=>$("title")?.classList.add("settle"),5000);
 
-  try{ await startCamera(); camOK=true }catch(e){ console.warn("camera unavailable",e) }
-  try{ await startMicrophone(); micOK=true }catch(e){ console.warn("microphone unavailable",e) }
-
-  if(!camOK&&!micOK){
-    showError("카메라와 마이크를 사용할 수 없습니다.<br>브라우저 권한을 확인해 주세요.");
-    return;
-  }
+  try{ await startCamera(); camOK=true; }catch(e){ console.warn("camera background start",e); }
+  try{ await startMicrophone(); micOK=true; }catch(e){ console.warn("microphone background start",e); }
   if(camOK)loadFaceModel();
 
   setInterval(()=>{
@@ -1090,8 +2011,11 @@ async function init(){
     analyzeFace();
     analyzeTouch();
     deriveComposite(now);
-    currentAction=updateInteraction(now);
-    AudioEngine.update();
+    if(ExperienceUI.active){
+      currentAction=updateInteraction(now);
+      AudioEngine.update();
+    }
+    updateCameraGuideStatus();
   },80);
 
   let lastTick=performance.now(),lastAutoRecord=0;
@@ -1099,11 +2023,13 @@ async function init(){
     const now=performance.now();
     const dt=Math.min(.25,(now-lastTick)/1000);
     lastTick=now;
-    growGarden(dt,now);
-    updateAccessibilityText(now,currentAction);
-    if(now-lastAutoRecord>10000){
-      lastAutoRecord=now;
-      recordExperience({action:currentAction,duration:(now-InteractionState.sessionStart)/1000});
+    if(ExperienceUI.active){
+      growGarden(dt,now);
+      updateAccessibilityText(now,currentAction);
+      if(now-lastAutoRecord>10000){
+        lastAutoRecord=now;
+        recordExperience({action:currentAction,duration:(now-InteractionState.sessionStart)/1000});
+      }
     }
   },80);
 }
